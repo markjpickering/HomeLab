@@ -1,0 +1,23 @@
+# SOPS Configuration
+# This file configures how SOPS encrypts secrets in this repository
+
+creation_rules:
+  # Encrypt any file matching *.enc.yaml, *.enc.json, or *.enc.env
+  - path_regex: \.enc\.(yaml|yml|json|env)$
+    age: >-
+      YOUR_AGE_PUBLIC_KEY_HERE
+    # To generate your age key pair:
+    # 1. Run: age-keygen -o ~/.config/sops/age/keys.txt
+    # 2. Copy the public key from the output (age1...)
+    # 3. Replace YOUR_AGE_PUBLIC_KEY_HERE above with your public key
+    # 4. Keep the private key in ~/.config/sops/age/keys.txt SECURE and BACKED UP
+
+  # Encrypt terraform secrets
+  - path_regex: k8s-infra/terraform/secrets\.enc\.tfvars$
+    age: >-
+      YOUR_AGE_PUBLIC_KEY_HERE
+
+  # Encrypt ansible vault files
+  - path_regex: k8s-infra/ansible/.*\.enc\.(yaml|yml)$
+    age: >-
+      YOUR_AGE_PUBLIC_KEY_HERE

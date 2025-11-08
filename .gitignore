@@ -1,0 +1,73 @@
+# HomeLab .gitignore
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/.terraform.tfstate.lock.info
+**/crash.log
+**/override.tf
+**/override.tf.json
+**/*_override.tf
+**/*_override.tf.json
+
+# Unencrypted secrets (only encrypted .enc.* files should be committed)
+secrets.yaml
+secrets.json
+secrets.env
+secrets.tfvars
+secrets.auto.tfvars
+**/secrets/*.yaml
+**/secrets/*.json
+!**/secrets/*.enc.yaml
+!**/secrets/*.enc.json
+
+# Age/SOPS private keys
+**/age/keys.txt
+**/.config/sops/age/keys.txt
+*.key
+*.pem
+!*.pub
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.local
+
+# SSH keys
+id_rsa
+id_ed25519
+id_ecdsa
+*.ppk
+
+# Ansible
+*.retry
+**/.ansible/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.backup
+*.old

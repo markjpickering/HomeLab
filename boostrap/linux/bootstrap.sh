@@ -61,6 +61,28 @@ else
 fi
 echo ''
 
+# Install age (encryption tool for SOPS)
+echo '📦 Installing age...'
+if command -v age &> /dev/null; then
+    echo "age is already installed: $(age --version 2>&1 | head -n1)"
+else
+    apt-get install -y -qq age
+    echo "✅ age installed: $(age --version 2>&1 | head -n1)"
+fi
+echo ''
+
+# Install SOPS (secrets management)
+echo '📦 Installing SOPS...'
+if command -v sops &> /dev/null; then
+    echo "SOPS is already installed: $(sops --version)"
+else
+    SOPS_VERSION="3.9.0"
+    wget -q "https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64" -O /usr/local/bin/sops
+    chmod +x /usr/local/bin/sops
+    echo "✅ SOPS installed: $(sops --version)"
+fi
+echo ''
+
 # Install additional useful tools
 echo '📦 Installing additional tools...'
 apt-get install -y -qq \
@@ -75,8 +97,10 @@ echo ''
 echo '✅ Linux bootstrap complete!'
 echo ''
 echo 'Installed tools:'
-echo "  - Terraform: $(terraform version -json | grep -o '"version":"[^"]*' | cut -d'"' -f4)"
+echo "  - Terraform: $(terraform version -json | grep -o '\"version\":\"[^\"]*' | cut -d'\"' -f4)"
 echo "  - Ansible: $(ansible --version | head -n1 | awk '{print $2}')"
+echo "  - SOPS: $(sops --version)"
+echo "  - age: $(age --version 2>&1 | head -n1)"
 echo ''
 echo 'Next steps:'
 echo '  1. Navigate to the terraform directory:'
