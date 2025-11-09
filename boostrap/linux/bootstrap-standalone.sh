@@ -16,10 +16,25 @@ if [ "$EUID" -ne 0 ]; then
     exec sudo bash "$0" "$@"
 fi
 
-# Configuration
-GITHUB_REPO="${1:-https://github.com/YOUR_USERNAME/HomeLab.git}"  # Update with your repo
-INSTALL_DIR="/root/homelab"
+# Configuration - can be overridden by environment variables or arguments
+GITHUB_REPO="${1:-${HOMELAB_REPO_URL:-}}"
+INSTALL_DIR="${HOMELAB_INSTALL_DIR:-/root/homelab}"
 BOOTSTRAP_SCRIPT="$INSTALL_DIR/boostrap/linux/bootstrap.sh"
+
+# If no repo specified, try to detect or prompt
+if [ -z "$GITHUB_REPO" ]; then
+    echo "⚠️  No repository URL specified"
+    echo "Please provide repository URL:"
+    echo "  1. As argument: $0 https://github.com/username/HomeLab.git"
+    echo "  2. As environment variable: HOMELAB_REPO_URL=https://... $0"
+    echo "  3. Edit boostrap/config.sh after cloning"
+    echo ""
+    echo "Attempting to use default location (you may need to update it)..."
+    GITHUB_REPO="https://github.com/YOUR_USERNAME/HomeLab.git"
+    echo "Using: $GITHUB_REPO"
+    echo "If this fails, re-run with your actual repository URL"
+    echo ""
+fi
 
 echo "Repository: $GITHUB_REPO"
 echo "Install directory: $INSTALL_DIR"

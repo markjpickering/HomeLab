@@ -5,7 +5,7 @@ creation_rules:
   # Encrypt any file matching *.enc.yaml, *.enc.json, or *.enc.env
   - path_regex: \.enc\.(yaml|yml|json|env)$
     age: >-
-      YOUR_AGE_PUBLIC_KEY_HERE
+      age1m2teq9slv7edre946e4pmpacuyaz0rk95r8r80d8eel074m0zqcsagpag0
     # To generate your age key pair:
     # 1. Run: age-keygen -o ~/.config/sops/age/keys.txt
     # 2. Copy the public key from the output (age1...)
@@ -15,9 +15,9 @@ creation_rules:
   # Encrypt terraform secrets
   - path_regex: k8s-infra/terraform/secrets\.enc\.tfvars$
     age: >-
-      YOUR_AGE_PUBLIC_KEY_HERE
+      age1m2teq9slv7edre946e4pmpacuyaz0rk95r8r80d8eel074m0zqcsagpag0
 
   # Encrypt ansible vault files
   - path_regex: k8s-infra/ansible/.*\.enc\.(yaml|yml)$
     age: >-
-      YOUR_AGE_PUBLIC_KEY_HERE
+      age1m2teq9slv7edre946e4pmpacuyaz0rk95r8r80d8eel074m0zqcsagpag0

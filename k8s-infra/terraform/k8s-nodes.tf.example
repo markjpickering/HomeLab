@@ -1,0 +1,187 @@
+# Example Kubernetes Nodes Configuration
+# This file shows how to create k8s nodes that auto-join your ZeroTier network
+# Copy this to k8s-nodes.tf and customize for your environment
+
+# Variables
+variable "zerotier_network_id" {
+  description = "ZeroTier network ID for the HomeLab cluster"
+  type        = string
+}
+
+variable "ssh_public_key" {
+  description = "SSH public key for node access"
+  type        = string
+  default     = ""  # Set this or use ssh-agent
+}
+
+# Control Plane Node(s)
+resource "proxmox_virtual_environment_vm" "k8s_control_plane" {
+  count = 1  # Adjust for HA control plane
+  
+  name      = "k8s-master-${count.index + 1}"
+  node_name = "pve"  # Your Proxmox node name
+  
+  cpu {
+    cores = 2
+    type  = "host"
+  }
+  
+  memory {
+    dedicated = 4096
+  }
+  
+  disk {
+    datastore_id = "local-lvm"
+    size         = 32
+    interface    = "scsi0"
+  }
+  
+  network_device {
+    bridge = "vmbr0"
+  }
+  
+  # Cloud-init configuration
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+    
+    user_account {
+      username = "root"
+      keys     = var.ssh_public_key != "" ? [var.ssh_public_key] : []
+    }
+    
+    user_data_file_id = proxmox_virtual_environment_file.k8s_cloudinit.id
+  }
+  
+  operating_system {
+    type = "l26"  # Linux 2.6+ kernel
+  }
+  
+  tags = ["k8s", "control-plane"]
+}
+
+# Worker Nodes
+resource "proxmox_virtual_environment_vm" "k8s_workers" {
+  count = 3  # Number of worker nodes
+  
+  name      = "k8s-worker-${count.index + 1}"
+  node_name = "pve"
+  
+  cpu {
+    cores = 4
+    type  = "host"
+  }
+  
+  memory {
+    dedicated = 8192
+  }
+  
+  disk {
+    datastore_id = "local-lvm"
+    size         = 64
+    interface    = "scsi0"
+  }
+  
+  network_device {
+    bridge = "vmbr0"
+  }
+  
+  initialization {
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+    
+    user_account {
+      username = "root"
+      keys     = var.ssh_public_key != "" ? [var.ssh_public_key] : []
+    }
+    
+    user_data_file_id = proxmox_virtual_environment_file.k8s_cloudinit.id
+  }
+  
+  operating_system {
+    type = "l26"
+  }
+  
+  tags = ["k8s", "worker"]
+}
+
+# Cloud-init configuration with ZeroTier auto-join
+resource "proxmox_virtual_environment_file" "k8s_cloudinit" {
+  content_type = "snippets"
+  datastore_id = "local"
+  node_name    = "pve"
+  
+  source_raw {
+    data = <<-EOF
+    #cloud-config
+    hostname: k8s-node
+    
+    package_update: true
+    package_upgrade: true
+    
+    packages:
+      - curl
+      - wget
+      - git
+      - ca-certificates
+      - gnupg
+      - lsb-release
+    
+    runcmd:
+      # Install ZeroTier
+      - curl -s https://install.zerotier.com | bash
+      
+      # Join ZeroTier network
+      - zerotier-cli join ${var.zerotier_network_id}
+      
+      # Wait for ZeroTier to be ready
+      - timeout 30 bash -c 'until zerotier-cli info | grep -q ONLINE; do sleep 2; done'
+      
+      # Set hostname based on ZeroTier node ID (optional)
+      - ZTID=$(zerotier-cli info | cut -d' ' -f3)
+      - hostnamectl set-hostname "k8s-node-$ZTID"
+      
+      # Disable swap (required for k8s)
+      - swapoff -a
+      - sed -i '/ swap / s/^/#/' /etc/fstab
+      
+      # Enable IP forwarding (required for k8s)
+      - echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf
+      - sysctl -p
+    
+    write_files:
+      # Create a flag file to indicate cloud-init completion
+      - path: /etc/k8s-node-ready
+        content: |
+          ZeroTier Network: ${var.zerotier_network_id}
+          Node initialized at: $(date)
+    
+    final_message: "k8s node cloud-init complete. ZeroTier joined: ${var.zerotier_network_id}"
+    EOF
+    
+    file_name = "k8s-cloudinit.yaml"
+  }
+}
+
+# Outputs
+output "control_plane_names" {
+  description = "Control plane node names"
+  value       = proxmox_virtual_environment_vm.k8s_control_plane[*].name
+}
+
+output "worker_names" {
+  description = "Worker node names"
+  value       = proxmox_virtual_environment_vm.k8s_workers[*].name
+}
+
+output "zerotier_network_id" {
+  description = "ZeroTier network ID that nodes joined"
+  value       = var.zerotier_network_id
+}
+EOF

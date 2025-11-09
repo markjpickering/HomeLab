@@ -78,23 +78,62 @@ Before running, update these values:
 
 2. **Install Directory**: Default is `/root/homelab` (can be changed in scripts)
 
-## After Bootstrap
+## Infrastructure Bootstrap
 
-Once bootstrap is complete:
+After the bootstrap host is ready, run the complete infrastructure bootstrap:
 
 ```bash
-# Access your infrastructure code
-cd ~/homelab/k8s-infra/terraform
-
-# Initialize Terraform
-terraform init
-
-# Plan your infrastructure
-terraform plan
-
-# Apply your infrastructure
-terraform apply
+cd ~/homelab/boostrap/linux
+bash bootstrap-infrastructure.sh
 ```
+
+This will guide you through:
+1. Deploying ztnet controller (self-hosted ZeroTier)
+2. Creating your ZeroTier network
+3. Provisioning k8s nodes with Terraform
+4. Configuring Kubernetes with Ansible
+
+**See the complete guide:** [`docs/BOOTSTRAP-GUIDE.md`](../docs/BOOTSTRAP-GUIDE.md)
+
+## Manual Infrastructure Setup (Alternative)
+
+If you prefer to run steps manually:
+
+```bash
+# 1. Deploy ztnet controller
+cd ~/homelab/boostrap/ztnet
+cp .env.example .env
+# Edit .env with your secrets
+docker-compose up -d
+
+# 2. Access http://localhost:3000 and create network
+
+# 3. Provision infrastructure
+cd ~/homelab/k8s-infra/terraform
+export TF_VAR_zerotier_network_id="your-network-id"
+terraform init
+terraform plan
+terraform apply
+
+# 4. Configure Kubernetes
+cd ~/homelab/k8s-infra/ansible
+# Edit inventory/hosts.ini with ZeroTier IPs
+ansible-playbook -i inventory/hosts.ini site.yml
+```
+
+## Documentation
+
+### Quick References
+- **[QUICK-START.md](QUICK-START.md)** - One-page quick reference for bootstrap process
+- **[docs/OPERATIONS-CHEATSHEET.md](../docs/OPERATIONS-CHEATSHEET.md)** - Command cheat sheet for operations
+
+### Complete Guides
+- **[docs/BOOTSTRAP-GUIDE.md](../docs/BOOTSTRAP-GUIDE.md)** - Complete 4-phase bootstrap walkthrough
+- **[docs/OPERATIONS-GUIDE.md](../docs/OPERATIONS-GUIDE.md)** - Update, destroy, and manage infrastructure
+- **[docs/SOPS-SETUP.md](../docs/SOPS-SETUP.md)** - Secrets management setup
+
+### Implementation Details
+- **[docs/IMPLEMENTATION-SUMMARY.md](../docs/IMPLEMENTATION-SUMMARY.md)** - Technical implementation overview
 
 ## Troubleshooting
 

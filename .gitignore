@@ -36,6 +36,19 @@ secrets.auto.tfvars
 .env.*.local
 *.local
 
+# ztnet and ZeroTier
+.zerotier-network-id
+boostrap/ztnet/.env
+boostrap/ztnet/zerotier-one/
+
+# User configuration overrides
+.homelab.conf
+boostrap/config.local.sh
+
+# Docker volumes and data
+volumes/
+data/
+
 # SSH keys
 id_rsa
 id_ed25519

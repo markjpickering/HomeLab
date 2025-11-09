@@ -83,6 +83,45 @@ else
 fi
 echo ''
 
+# Install Docker
+echo '📦 Installing Docker...'
+if command -v docker &> /dev/null; then
+    echo "Docker is already installed: $(docker --version)"
+else
+    # Install Docker prerequisites
+    apt-get install -y -qq apt-transport-https ca-certificates curl gnupg lsb-release
+    
+    # Add Docker GPG key
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    
+    # Add Docker repository
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian ${DEBIAN_VERSION} stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    
+    # Install Docker
+    apt-get update -qq
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    
+    # Start and enable Docker
+    systemctl enable docker
+    systemctl start docker
+    
+    echo "✅ Docker installed: $(docker --version)"
+fi
+echo ''
+
+# Install docker-compose standalone (for compatibility)
+echo '📦 Installing docker-compose...'
+if command -v docker-compose &> /dev/null; then
+    echo "docker-compose is already installed: $(docker-compose --version)"
+else
+    DOCKER_COMPOSE_VERSION="2.24.5"
+    curl -SL "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+    echo "✅ docker-compose installed: $(docker-compose --version)"
+fi
+echo ''
+
 # Install additional useful tools
 echo '📦 Installing additional tools...'
 apt-get install -y -qq \
@@ -99,6 +138,8 @@ echo ''
 echo 'Installed tools:'
 echo "  - Terraform: $(terraform version -json | grep -o '\"version\":\"[^\"]*' | cut -d'\"' -f4)"
 echo "  - Ansible: $(ansible --version | head -n1 | awk '{print $2}')"
+echo "  - Docker: $(docker --version | awk '{print $3}' | tr -d ',')"
+echo "  - docker-compose: $(docker-compose --version | awk '{print $4}' | tr -d ',')"
 echo "  - SOPS: $(sops --version)"
 echo "  - age: $(age --version 2>&1 | head -n1)"
 echo ''

@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  ztnet:
+    image: sinamics/ztnet:latest
+    container_name: ztnet
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "9993:9993/udp"  # ZeroTier protocol port
+    environment:
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=ztnet
+      - ZEROTIER_CONTROLLER_PORT=9993
+    volumes:
+      - ztnet-data:/var/lib/zerotier-one
+      - ./zerotier-one:/var/lib/zerotier-one
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: ztnet-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=ztnet
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ztnet-data:
+  postgres-data:

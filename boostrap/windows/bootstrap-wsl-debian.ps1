@@ -33,8 +33,47 @@ if (-not $IsAdmin -and -not $AlreadyElevated) {
 
 # Configuration
 $WSL_DISTRO_NAME = "HomeLab-Debian"
-$GITHUB_REPO = "https://github.com/YOUR_USERNAME/HomeLab.git"  # Update this with your GitHub repo URL
 $INSTALL_DIR = "/root/homelab"
+
+# Get repository URL from environment or prompt user
+$GITHUB_REPO = $env:HOMELAB_REPO_URL
+if (-not $GITHUB_REPO) {
+    Write-Host "`n📋 Repository Configuration" -ForegroundColor Cyan
+    Write-Host "================================" -ForegroundColor Cyan
+    Write-Host "Please enter your HomeLab repository URL" -ForegroundColor Yellow
+    Write-Host "Example: https://github.com/username/HomeLab.git" -ForegroundColor DarkGray
+    Write-Host ""
+    
+    # Try to detect from current directory if we're in a git repo
+    try {
+        $gitRemote = git remote get-url origin 2>$null
+        if ($gitRemote) {
+            Write-Host "Detected repository: $gitRemote" -ForegroundColor Green
+            $useDetected = Read-Host "Use this repository? (Y/n)"
+            if ($useDetected -eq "" -or $useDetected -eq "Y" -or $useDetected -eq "y") {
+                $GITHUB_REPO = $gitRemote
+            }
+        }
+    } catch {
+        # Not in a git repository, that's fine
+    }
+    
+    # If still not set, prompt
+    if (-not $GITHUB_REPO) {
+        $GITHUB_REPO = Read-Host "Repository URL"
+        if (-not $GITHUB_REPO) {
+            Write-Host "❌ No repository URL provided. Cannot continue." -ForegroundColor Red
+            Write-Host ""
+            Write-Host "You can also set the environment variable:" -ForegroundColor Yellow
+            Write-Host "  `$env:HOMELAB_REPO_URL = 'https://github.com/username/HomeLab.git'" -ForegroundColor White
+            Write-Host "  .\bootstrap-wsl-debian.ps1" -ForegroundColor White
+            exit 1
+        }
+    }
+    
+    Write-Host "✅ Using repository: $GITHUB_REPO" -ForegroundColor Green
+    Write-Host ""
+}
 
 # Helper function for steps
 function Step {
