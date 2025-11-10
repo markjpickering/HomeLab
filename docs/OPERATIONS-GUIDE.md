@@ -8,6 +8,7 @@ Guide for updating configuration, destroying environments, and managing your Hom
 - [Destroying Infrastructure](#destroying-infrastructure)
 - [Backup and Restore](#backup-and-restore)
 - [Common Operations](#common-operations)
+- [Controller Migration](#controller-migration)
 
 ---
 
@@ -197,6 +198,37 @@ terraform apply
 # Then authorize nodes in ztnet
 # Then run Ansible
 ```
+
+---
+
+## Controller Migration
+
+You can move the ztnet controller to a permanent host after bootstrap without breaking existing networks by preserving the controller identity.
+
+### Migrate with Bootstrap Hook
+
+Set these variables before running the bootstrap script (or export them and re-run the final step):
+
+```bash
+export HOMELAB_ZTNET_REMOTE_HOST="root@10.0.0.5"   # Destination host
+export HOMELAB_ZTNET_REMOTE_DIR="/opt/ztnet"       # Destination directory (optional)
+```
+
+At the end of the bootstrap, the script will:
+- Copy `boostrap/ztnet/docker-compose.yml` and `.env` to the remote host
+- Copy `boostrap/ztnet/zerotier-one/` (controller identity) to the remote host
+- Ensure Docker is installed on the remote
+- Start the ztnet stack remotely and stop the local stack
+
+This preserves the controller identity so all networks and members continue to function. The ztnet UI database is not migrated by default; if you need UI data continuity, back up/restore the Postgres volume.
+
+### Manual Migration Outline
+
+1. Stop local controller: `cd boostrap/ztnet && docker-compose down`
+2. Copy `zerotier-one/` directory to the new host
+3. Copy `docker-compose.yml` and `.env` to the new host
+4. Start the stack on the new host: `docker compose up -d`
+5. Verify network/controller functionality
 
 ### Destroy Specific Nodes
 

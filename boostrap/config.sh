@@ -13,7 +13,17 @@ export HOMELAB_WSL_DISTRO_NAME="${HOMELAB_WSL_DISTRO_NAME:-HomeLab-Debian}"
 
 # ZeroTier Configuration
 export HOMELAB_ZEROTIER_NETWORK_NAME="${HOMELAB_ZEROTIER_NETWORK_NAME:-HomeLabK8s}"
+export HOMELAB_ZEROTIER_NETWORK_DESCRIPTION="${HOMELAB_ZEROTIER_NETWORK_DESCRIPTION:-HomeLab Kubernetes overlay network}"
 export HOMELAB_ZEROTIER_SUBNET="${HOMELAB_ZEROTIER_SUBNET:-10.147.17.0/24}"
+# Optional: pre-provide an existing network ID to skip creation
+export HOMELAB_ZEROTIER_NETWORK_ID="${HOMELAB_ZEROTIER_NETWORK_ID:-}"
+# Whether to join the bootstrap host to the ZT network (y/n)
+export HOMELAB_JOIN_BOOTSTRAP_HOST="${HOMELAB_JOIN_BOOTSTRAP_HOST:-n}"
+# Auto-authorize all members that appear on the network (y/n)
+export HOMELAB_ZT_AUTO_AUTHORIZE="${HOMELAB_ZT_AUTO_AUTHORIZE:-y}"
+# Optional: host to re-home the controller to after provisioning (e.g. root@10.147.17.10)
+export HOMELAB_ZTNET_REMOTE_HOST="${HOMELAB_ZTNET_REMOTE_HOST:-}"
+export HOMELAB_ZTNET_REMOTE_DIR="${HOMELAB_ZTNET_REMOTE_DIR:-/opt/ztnet}"
 
 # ztnet Configuration
 export HOMELAB_ZTNET_PORT="${HOMELAB_ZTNET_PORT:-3000}"

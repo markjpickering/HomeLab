@@ -32,25 +32,19 @@ bash bootstrap-infrastructure.sh
 
 **Phase 1 - Deploy ztnet:**
 - Wait for containers to start
-- Go to http://localhost:3000
-- Create admin account
-- Press Enter
+- Optional: Access http://localhost:3000 to create a UI admin (not required for automation)
 
-**Phase 2 - Create Network:**
-- In ztnet UI: Create new network
-- Set name: HomeLabK8s
-- Enable IPv4 auto-assign (e.g., 10.147.17.0/24)
-- Copy Network ID (16 hex chars)
-- Paste when prompted
+**Phase 2 - Create Network (automated):**
+- The script creates the ZeroTier network via the controller API
+- Name, description, and subnet are read from config (see below)
+- Network ID is saved to `.zerotier-network-id`
 
 **Phase 3 - Provision Nodes:**
 - (First time) Create encrypted secrets file if prompted
 - Review Terraform plan
 - Type `y` to apply
-- Go to ztnet UI → Members
-- Authorize all new nodes
-- Note their ZeroTier IPs
-- Press Enter
+- If auto-authorization is enabled, nodes are authorized automatically; otherwise authorize in ztnet UI
+- Note their ZeroTier IPs if assigning statics
 
 **Phase 4 - Configure k8s:**
 - Edit `k8s-infra/ansible/inventory/hosts.ini`
@@ -102,7 +96,7 @@ docker-compose up -d
 
 ```bash
 cd ~/homelab/k8s-infra/terraform
-export TF_VAR_zerotier_network_id="your-network-id"
+export TF_VAR_zerotier_network_id="$(cat ~/.*/homelab/.zerotier-network-id 2>/dev/null || echo your-network-id)"
 terraform init
 terraform apply
 ```
@@ -185,6 +179,7 @@ boostrap/
 ├── ztnet/
 │   ├── docker-compose.yml        # ztnet controller
 │   └── .env                       # Generated secrets
+│   └── zerotier-one/              # Controller identity (authtoken.secret etc.)
 ├── linux/
 │   ├── bootstrap.sh               # Install tools
 │   └── bootstrap-infrastructure.sh # Main orchestration

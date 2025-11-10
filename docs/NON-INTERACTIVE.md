@@ -26,10 +26,16 @@ bash bootstrap-infrastructure.sh --yes [--phase <1-6>]
 - `-p, --phase <1-6>` - Run specific phase
 - `-h, --help` - Show help
 
-**Example - Complete Bootstrap:**
+**Example - Complete Bootstrap (auto-create ZeroTier network):**
 ```bash
-# Set required environment variables
-export HOMELAB_ZEROTIER_NETWORK_ID="a1b2c3d4e5f6g7h8"
+# Optional: customize network before auto-creation
+export HOMELAB_ZEROTIER_NETWORK_NAME="HomeLabK8s"
+export HOMELAB_ZEROTIER_NETWORK_DESCRIPTION="HomeLab Kubernetes overlay network"
+export HOMELAB_ZEROTIER_SUBNET="10.147.17.0/24"
+# Optional: auto-authorize members
+export HOMELAB_ZT_AUTO_AUTHORIZE=y
+# Optional: join the bootstrap host to the network
+export HOMELAB_JOIN_BOOTSTRAP_HOST=n
 
 # Run all phases non-interactively
 bash bootstrap-infrastructure.sh --yes
@@ -64,23 +70,18 @@ bash boostrap/linux/setup-sops.sh --yes
 sops k8s-infra/terraform/secrets.enc.yaml
 ```
 
-## Required Environment Variables
+## Configuration Variables
 
-### Phase 2 - Create ZeroTier Network
+### Phase 2 - ZeroTier Network
 
-**Required:**
-```bash
-export HOMELAB_ZEROTIER_NETWORK_ID="a1b2c3d4e5f6g7h8"
-```
+- `HOMELAB_ZEROTIER_NETWORK_ID` — Use an existing network (skip creation). Optional.
+- `HOMELAB_ZEROTIER_NETWORK_NAME` — Name for new network (default `HomeLabK8s`).
+- `HOMELAB_ZEROTIER_NETWORK_DESCRIPTION` — Description for new network.
+- `HOMELAB_ZEROTIER_SUBNET` — IPv4 subnet (default `10.147.17.0/24`).
+- `HOMELAB_JOIN_BOOTSTRAP_HOST` — `y/n` to join bootstrap host (default `n`).
+- `HOMELAB_ZT_AUTO_AUTHORIZE` — `y/n` to auto-authorize members (default `y`).
 
-If not set, Phase 2 will fail in non-interactive mode.
-
-**Optional:**
-```bash
-export HOMELAB_JOIN_BOOTSTRAP_HOST="true"  # Join bootstrap host to network
-export HOMELAB_ZEROTIER_NETWORK_NAME="HomeLabK8s"
-export HOMELAB_ZEROTIER_SUBNET="10.147.17.0/24"
-```
+If `HOMELAB_ZEROTIER_NETWORK_ID` is not provided, Phase 2 will automatically create the network via the local controller API and persist the ID to `.zerotier-network-id`.
 
 ## Complete Non-Interactive Example
 
@@ -112,20 +113,20 @@ echo "✅ Bootstrap complete!"
 
 ### Phase 1 - Deploy ztnet Controller
 - Starts containers
-- Waits 10 seconds for initialization
-- **Manual step required:** Create admin account at http://localhost:3000
+- Waits for initialization
+- ztnet UI admin account creation is optional and not required for automated network creation (controller API is used locally on `127.0.0.1:9993`).
 
 ### Phase 2 - Create ZeroTier Network
-- Uses `HOMELAB_ZEROTIER_NETWORK_ID` environment variable
-- **Fails if not set**
-- Skips bootstrap host join unless `HOMELAB_JOIN_BOOTSTRAP_HOST=true`
+- If `HOMELAB_ZEROTIER_NETWORK_ID` is set, uses it.
+- Otherwise, creates a network automatically with the configured name/description/subnet.
+- Joins the bootstrap host only if `HOMELAB_JOIN_BOOTSTRAP_HOST=y`.
 
 ### Phase 3 - Provision Infrastructure
 - Auto-creates secrets file from example if missing
 - **Does not open SOPS editor** (you must edit manually later)
 - Runs `terraform apply -auto-approve`
-- Waits 30 seconds for nodes to join ZeroTier
-- **Manual step required:** Authorize nodes in ztnet web UI
+- Waits briefly for nodes to join ZeroTier
+- If `HOMELAB_ZT_AUTO_AUTHORIZE=y`, members are authorized automatically; otherwise, authorize in the ztnet UI
 
 ### Phase 4 - Configure Kubernetes
 - Assumes inventory is already populated
@@ -158,9 +159,12 @@ sops k8s-infra/terraform/secrets.enc.yaml
 Create `~/.homelab.conf`:
 ```bash
 export HOMELAB_REPO_URL="https://github.com/myuser/HomeLab.git"
-export HOMELAB_ZEROTIER_NETWORK_ID="a1b2c3d4e5f6g7h8"
+export HOMELAB_ZEROTIER_NETWORK_NAME="HomeLabK8s"
+export HOMELAB_ZEROTIER_NETWORK_DESCRIPTION="HomeLab Kubernetes overlay network"
+export HOMELAB_ZEROTIER_SUBNET="10.147.17.0/24"
 export HOMELAB_K8S_WORKER_COUNT="5"
 export HOMELAB_JOIN_BOOTSTRAP_HOST="false"
+export HOMELAB_ZT_AUTO_AUTHORIZE="y"
 ```
 
 ### 4. Then Run
@@ -200,10 +204,12 @@ jobs:
           echo "${{ secrets.AGE_PRIVATE_KEY }}" > ~/.config/sops/age/keys.txt
           
       - name: Run bootstrap
-        env:
-          HOMELAB_ZEROTIER_NETWORK_ID: ${{ github.event.inputs.zerotier_network_id }}
         run: |
-          bash boostrap/linux/bootstrap-infrastructure.sh --yes --phase 4
+          export HOMELAB_ZEROTIER_NETWORK_NAME="HomeLabK8s"
+          export HOMELAB_ZEROTIER_NETWORK_DESCRIPTION="HomeLab Kubernetes overlay network"
+          export HOMELAB_ZEROTIER_SUBNET="10.147.17.0/24"
+          export HOMELAB_ZT_AUTO_AUTHORIZE=y
+          bash boostrap/linux/bootstrap-infrastructure.sh --yes --phase 6
 ```
 
 ### GitLab CI
@@ -211,7 +217,10 @@ jobs:
 deploy:
   stage: deploy
   script:
-    - export HOMELAB_ZEROTIER_NETWORK_ID="$ZEROTIER_NETWORK_ID"
+    - export HOMELAB_ZEROTIER_NETWORK_NAME="HomeLabK8s"
+    - export HOMELAB_ZEROTIER_NETWORK_DESCRIPTION="HomeLab Kubernetes overlay network"
+    - export HOMELAB_ZEROTIER_SUBNET="10.147.17.0/24"
+    - export HOMELAB_ZT_AUTO_AUTHORIZE=y
     - bash boostrap/linux/bootstrap.sh
     - bash boostrap/linux/bootstrap-infrastructure.sh --yes --phase 6
   only:

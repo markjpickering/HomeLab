@@ -86,23 +86,24 @@ The ztnet controller is deployed using Docker Compose and provides:
 
 Creates the overlay network that all k8s nodes will join.
 
-**What happens:**
-1. Prompts you to create a network in the ztnet web UI
-2. Saves the Network ID to `.zerotier-network-id` file
+**What happens (automated):**
+1. Uses the local controller API to create a network with your configured name and subnet
+2. Saves the Network ID to `.zerotier-network-id`
 3. Optionally joins the bootstrap host to the network
+4. Optionally auto-authorizes members as they appear
 
-**Manual steps required:**
-1. Go to http://localhost:3000
-2. Click "Create Network" or navigate to Networks → Add
-3. Configure network settings:
-   - **Name**: HomeLabK8s (or your choice)
-   - **IPv4 Auto-Assign**: Enable
-   - **IPv4 Range**: e.g., `10.147.17.0/24`
-4. Copy the 16-character Network ID (e.g., `a1b2c3d4e5f6g7h8`)
-5. Paste it when prompted by the script
+No manual UI step is required. To override automation, set `HOMELAB_ZEROTIER_NETWORK_ID` before running to use an existing network.
+
+**Config knobs:**
+- `HOMELAB_ZEROTIER_NETWORK_NAME` (default: `HomeLabK8s`)
+- `HOMELAB_ZEROTIER_NETWORK_DESCRIPTION` (default: `HomeLab Kubernetes overlay network`)
+- `HOMELAB_ZEROTIER_SUBNET` (default: `10.147.17.0/24`)
+- `HOMELAB_ZEROTIER_NETWORK_ID` (skip creation and use this ID)
+- `HOMELAB_JOIN_BOOTSTRAP_HOST` (`y`/`n`, default `n`)
+- `HOMELAB_ZT_AUTO_AUTHORIZE` (`y`/`n`, default `y`)
 
 **Network ID storage:**
-The Network ID is saved to `.zerotier-network-id` in your repo root and used by Terraform in Phase 3.
+The network ID is saved to `.zerotier-network-id` in the repo root and exported to Terraform in Phase 3.
 
 ### Phase 3: Provision Infrastructure
 
@@ -131,10 +132,9 @@ Uses Terraform to create VMs/containers that auto-join your ZeroTier network.
 **Terraform provisioning:**
 1. Review Terraform plan when shown
 2. Type `y` to confirm infrastructure creation
-3. After nodes are created, go to ztnet web UI
-4. Navigate to your network → Members
-5. **Authorize each new node** that appears
-6. Optionally assign static IPs (e.g., 10.147.17.10, .11, .12, etc.)
+3. Nodes boot and join the ZeroTier network
+4. If `HOMELAB_ZT_AUTO_AUTHORIZE=y`, members are auto-authorized; otherwise authorize in ztnet UI
+5. Optionally assign static IPs (e.g., 10.147.17.10, .11, .12, etc.)
 
 **Important notes:**
 - Nodes must be authorized before they can communicate
@@ -277,6 +277,21 @@ Common issues:
 - Cloud-init still running (wait a few minutes)
 - ZeroTier failed to install (check `/var/log/cloud-init-output.log`)
 - Network ID incorrect (check `.zerotier-network-id` file)
+- Controller API not reachable on `127.0.0.1:9993` (ensure compose is up)
+
+## Controller Hosting Transfer
+
+By default the controller (ztnet) runs locally during bootstrap to create the network and onboard nodes. After provisioning, you can re-home the controller to a permanent host (e.g., a VPS or a management VM) and retire the bootstrap host.
+
+Two options:
+
+- Bring your own host and set:
+  - `HOMELAB_ZTNET_REMOTE_HOST` (e.g., `root@10.0.0.5`)
+  - `HOMELAB_ZTNET_REMOTE_DIR` (default `/opt/ztnet`)
+
+  The bootstrap scripts include hooks to copy the controller identity (`boostrap/ztnet/zerotier-one`) and redeploy the ztnet stack on the remote host with Docker. This preserves the controller identity so existing networks continue working. The ztnet UI database is not migrated by default; you can export/import the DB if needed.
+
+- Alternatively, keep the controller running on the bootstrap host until you’re ready to migrate. Network operation is unaffected as long as the controller identity is preserved when moved.
 
 ### Ansible can't connect to nodes
 

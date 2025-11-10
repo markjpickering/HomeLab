@@ -99,6 +99,179 @@ wait_for_service() {
     log_error "Service did not become ready in time"
 }
 
+# ZeroTier controller API helpers (via localhost:9993 exposed in compose)
+zt_read_token() {
+    local token_file="$ZTNET_DIR/zerotier-one/authtoken.secret"
+    if [ ! -f "$token_file" ]; then
+        log_error "ZeroTier controller token not found at $token_file. Is ztnet running?"
+    fi
+    cat "$token_file"
+}
+
+zt_api() {
+    local method="$1"; shift
+    local path="$1"; shift
+    local data="${1:-}"
+    local token
+    token=$(zt_read_token)
+    if [ -n "$data" ]; then
+        curl -sS -X "$method" -H "X-ZT1-Auth: $token" -H "Content-Type: application/json" --data "$data" "http://127.0.0.1:9993$path"
+    else
+        curl -sS -X "$method" -H "X-ZT1-Auth: $token" "http://127.0.0.1:9993$path"
+    fi
+}
+
+create_zerotier_network() {
+    local name="${HOMELAB_ZEROTIER_NETWORK_NAME:-HomeLabK8s}"
+    local desc="${HOMELAB_ZEROTIER_NETWORK_DESCRIPTION:-HomeLab Kubernetes overlay network}"
+    local subnet="${HOMELAB_ZEROTIER_SUBNET:-10.147.17.0/24}"
+
+    log_info "Creating ZeroTier network automatically (name: $name, subnet: $subnet)"
+
+    # Ensure controller API is up
+    local status
+    status=$(zt_api GET "/status" || true)
+    if [ -z "$status" ]; then
+        log_error "Controller API not responding on 127.0.0.1:9993"
+    fi
+    local address
+    address=$(echo "$status" | jq -r '.address')
+    if [ -z "$address" ] || [ "$address" = "null" ]; then
+        log_error "Unable to read controller address from /status"
+    fi
+
+    # Derive a network ID: controller address (10 hex) + 6 random hex chars
+    local tail
+    tail=$(head -c 3 /dev/urandom | hexdump -v -e '/1 "%02x"')
+    local net_id="${address}${tail}"
+
+    # Derive IP pool start/end from subnet (basic /24 handling)
+    local base
+    base=$(echo "$subnet" | cut -d'/' -f1)
+    local pool_start pool_end route
+    if echo "$base" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && echo "$subnet" | grep -q '/24'; then
+        pool_start="$(echo "$base" | awk -F. '{printf "%d.%d.%d.10", $1,$2,$3}')"
+        pool_end="$(echo "$base" | awk -F. '{printf "%d.%d.%d.250", $1,$2,$3}')"
+        route="$(echo "$base" | awk -F. '{printf "%d.%d.%d.0/24", $1,$2,$3}')"
+    else
+        # Fallback defaults
+        pool_start="10.147.17.10"
+        pool_end="10.147.17.250"
+        route="10.147.17.0/24"
+    fi
+
+    # Compose config
+    local cfg
+    cfg=$(jq -nc \
+        --arg name "$name" \
+        --arg desc "$desc" \
+        --arg start "$pool_start" \
+        --arg end "$pool_end" \
+        --arg route "$route" \
+        '{
+            name: $name,
+            description: $desc,
+            v4AssignMode: { zt: true },
+            routes: [{ target: $route }],
+            ipAssignmentPools: [{ ipRangeStart: $start, ipRangeEnd: $end }]
+        }')
+
+    # Try create (POST), fall back to PUT
+    local resp
+    resp=$(zt_api POST "/controller/network/$net_id" "$cfg" || true)
+    if [ -z "$resp" ] || echo "$resp" | jq -e '.id? // empty' >/dev/null 2>&1; then
+        : # likely created
+    else
+        resp=$(zt_api PUT "/controller/network/$net_id" "$cfg" || true)
+    fi
+
+    # Read back to confirm
+    local verify
+    verify=$(zt_api GET "/controller/network/$net_id" || true)
+    if [ -z "$verify" ] || ! echo "$verify" | jq -e '.id? // empty' >/dev/null 2>&1; then
+        log_error "Failed to create or read network $net_id via controller API"
+    fi
+
+    echo "$net_id"
+}
+
+authorize_all_members() {
+    local net_id="$1"
+    log_info "Authorizing all members on network $net_id"
+    local members
+    members=$(zt_api GET "/controller/network/$net_id/member" || true)
+    if [ -z "$members" ]; then
+        log_warning "No members returned yet; skipping authorization"
+        return 0
+    fi
+    echo "$members" | jq -r 'keys[]' | while read -r mid; do
+        zt_api POST "/controller/network/$net_id/member/$mid" '{"authorized":true}' >/dev/null 2>&1 || true
+    done
+    log_success "Members authorized (where present)"
+}
+
+# Optional: Transfer controller hosting to a remote host
+transfer_controller() {
+    local remote_host="${HOMELAB_ZTNET_REMOTE_HOST:-}"
+    local remote_dir="${HOMELAB_ZTNET_REMOTE_DIR:-/opt/ztnet}"
+    if [ -z "$remote_host" ]; then
+        return 0
+    fi
+
+    log_info "Preparing to transfer controller to $remote_host ($remote_dir)"
+
+    if [ "$NON_INTERACTIVE" = false ]; then
+        read -p "Proceed with controller transfer now? [y/N]: " -n 1 -r; echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_warning "Controller transfer skipped by user"
+            return 0
+        fi
+    fi
+
+    # Ensure ssh/scp present
+    if ! command -v ssh >/dev/null 2>&1 || ! command -v scp >/dev/null 2>&1; then
+        log_error "ssh/scp not available on bootstrap host. Install openssh-client."
+    fi
+
+    # Create remote dir and copy compose + env + controller identity
+    log_info "Copying ztnet stack to remote host..."
+    ssh -o StrictHostKeyChecking=no "$remote_host" "sudo mkdir -p '$remote_dir' && sudo chown \$(id -u):\$(id -g) '$remote_dir'"
+    scp "$ZTNET_DIR/docker-compose.yml" "$ZTNET_DIR/.env" "$remote_host":"$remote_dir/" >/dev/null
+    ssh "$remote_host" "mkdir -p '$remote_dir/zerotier-one'"
+    scp -r "$ZTNET_DIR/zerotier-one/"* "$remote_host":"$remote_dir/zerotier-one/" >/dev/null
+
+    # Install Docker on remote if missing, then start stack
+    log_info "Ensuring Docker on remote host..."
+    ssh "$remote_host" 'bash -s' << 'EOSSH'
+set -e
+if ! command -v docker >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq
+    apt-get install -y -qq apt-transport-https ca-certificates curl gnupg lsb-release
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+    apt-get update -qq
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    systemctl enable docker || true
+    systemctl start docker || true
+  else
+    echo "Docker is required on remote host" >&2
+    exit 1
+  fi
+fi
+EOSSH
+
+    log_info "Starting ztnet on remote host..."
+    ssh "$remote_host" "cd '$remote_dir' && docker compose up -d"
+
+    # Stop local controller
+    log_info "Stopping local ztnet stack..."
+    (cd "$ZTNET_DIR" && docker-compose down -v) || true
+    log_success "Controller transferred to $remote_host"
+}
+
 # Check prerequisites
 check_prerequisites() {
     log_info "Checking prerequisites..."
@@ -249,26 +422,11 @@ phase2_create_network() {
     
     # Check if network ID already provided
     ZEROTIER_NETWORK_ID="${HOMELAB_ZEROTIER_NETWORK_ID:-}"
-    
+
     if [ -z "$ZEROTIER_NETWORK_ID" ]; then
-        if [ "$NON_INTERACTIVE" = true ]; then
-            log_error "Non-interactive mode requires HOMELAB_ZEROTIER_NETWORK_ID environment variable"
-        fi
-        
-        log_warning "Manual step required:"
-        echo "  1. Go to http://localhost:3000"
-        echo "  2. Create a new ZeroTier network"
-        echo "  3. Configure the network settings:"
-        echo "     - Name: ${HOMELAB_ZEROTIER_NETWORK_NAME:-HomeLabK8s}"
-        echo "     - IPv4 Auto-Assign: Enable (e.g., ${HOMELAB_ZEROTIER_SUBNET:-10.147.17.0/24})"
-        echo "  4. Copy the Network ID (16-character hex)"
-        echo ""
-        
-        read -p "Enter your ZeroTier Network ID: " ZEROTIER_NETWORK_ID
-        
-        if [ -z "$ZEROTIER_NETWORK_ID" ]; then
-            log_error "Network ID cannot be empty"
-        fi
+        # Create network automatically via controller API
+        ZEROTIER_NETWORK_ID=$(create_zerotier_network)
+        log_success "ZeroTier network created: $ZEROTIER_NETWORK_ID"
     else
         log_info "Using provided Network ID: $ZEROTIER_NETWORK_ID"
     fi
@@ -281,26 +439,21 @@ phase2_create_network() {
     
     log_success "Network ID saved: $ZEROTIER_NETWORK_ID"
     
-    # Join bootstrap host to network (optional but recommended)
-    if [ "${HOMELAB_JOIN_BOOTSTRAP_HOST:-false}" = "true" ] || [ "$NON_INTERACTIVE" = false ]; then
-        if [ "$NON_INTERACTIVE" = false ]; then
-            log_info "Do you want to join this bootstrap host to the ZeroTier network?"
-            read -p "(recommended for accessing k8s cluster later) [y/N]: " -n 1 -r
-            echo
-            JOIN_NETWORK=$REPLY
-        else
-            JOIN_NETWORK="${HOMELAB_JOIN_BOOTSTRAP_HOST:-n}"
+    # Join bootstrap host to network based on preference
+    if [ "$NON_INTERACTIVE" = false ]; then
+        log_info "Join this bootstrap host to the ZeroTier network?"
+        read -p "[y/N]: " -n 1 -r; echo
+        JOIN_NETWORK=$REPLY
+    else
+        JOIN_NETWORK="$HOMELAB_JOIN_BOOTSTRAP_HOST"
+    fi
+    if [[ "$JOIN_NETWORK" =~ ^[Yy]$ ]]; then
+        if ! command -v zerotier-cli &> /dev/null; then
+            log_info "Installing ZeroTier client..."
+            curl -s https://install.zerotier.com | sudo bash
         fi
-        
-        if [[ $JOIN_NETWORK =~ ^[Yy]$ ]]; then
-            if ! command -v zerotier-cli &> /dev/null; then
-                log_info "Installing ZeroTier client..."
-                curl -s https://install.zerotier.com | sudo bash
-            fi
-            sudo zerotier-cli join "$ZEROTIER_NETWORK_ID"
-            log_success "Bootstrap host joined network"
-            log_warning "Remember to authorize this node in the ztnet web UI"
-        fi
+        sudo zerotier-cli join "$ZEROTIER_NETWORK_ID"
+        log_success "Bootstrap host joined network"
     fi
 }
 
@@ -351,14 +504,12 @@ phase3_provision_infrastructure() {
     
     # Wait for nodes to join ZeroTier
     log_info "Waiting for nodes to join ZeroTier network..."
-    
-    if [ "$NON_INTERACTIVE" = false ]; then
-        log_warning "Go to http://localhost:3000 and authorize all new nodes"
-        read -p "Press Enter after authorizing all nodes..."
+    # Basic wait loop for members to appear, then optionally auto-authorize
+    sleep 10
+    if [ "${HOMELAB_ZT_AUTO_AUTHORIZE:-y}" = "y" ]; then
+        authorize_all_members "$ZEROTIER_NETWORK_ID"
     else
-        log_warning "Make sure to authorize nodes at http://localhost:3000"
-        log_info "Waiting 30 seconds for nodes to join and be authorized..."
-        sleep 30
+        log_warning "Auto-authorization disabled. Authorize nodes in the ztnet UI."
     fi
 }
 
@@ -446,6 +597,9 @@ main() {
     echo "  - Access ztnet: http://localhost:3000"
     echo "  - Check cluster: kubectl get nodes"
     echo "  - View services: kubectl get svc -A"
+
+    # Optional controller transfer
+    transfer_controller
 }
 
 # Run main function

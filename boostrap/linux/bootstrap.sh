@@ -34,7 +34,8 @@ apt-get install -y -qq \
     gnupg \
     software-properties-common \
     ca-certificates \
-    lsb-release
+    lsb-release \
+    jq
 echo '✅ Essential packages installed'
 echo ''
 
