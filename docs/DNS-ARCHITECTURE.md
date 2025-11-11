@@ -297,6 +297,76 @@ grafana.homelab.internal    CNAME   grafana.shared.homelab.internal
 
 Or proxy handles routing without DNS change.
 
+## Authentication and Security
+
+### Built-in Authentication
+
+Technitium DNS Server includes built-in authentication:
+- **Admin account**: Username/password for web UI access
+- **API tokens**: Bearer tokens for programmatic access
+- **TSIG keys**: Secure zone transfers and dynamic updates
+
+### Authentik SSO Integration (Recommended)
+
+For centralized authentication across all HomeLab services, we add Authentik forward-auth protection to Technitium's web UI.
+
+**Benefits:**
+- Single sign-on across all services
+- Google/Microsoft OAuth integration
+- Multi-factor authentication support
+- Centralized user management
+- Audit logging of access
+
+**Architecture:**
+```
+User → dns.homelab.internal
+  ↓
+Traefik IngressRoute
+  ↓
+Authentik Forward-Auth Middleware (checks session)
+  ↓
+Technitium Web UI (if authenticated)
+```
+
+**Deployment:**
+
+The Authentik forward-auth configuration is deployed separately after both Authentik and Technitium are running:
+
+```bash
+# Deploy after Authentik and Technitium are both running
+kubectl apply -f k8s-apps/dns/technitium-auth.yaml
+```
+
+This creates:
+1. **Traefik Middleware** - Forward-auth to Authentik
+2. **Protected IngressRoutes** - Web UI accessible only after SSO login
+3. **Unprotected DNS service** - DNS queries (port 53) remain unauthenticated
+
+**Configuration in Authentik:**
+
+1. Create a new application in Authentik:
+   - Name: Technitium DNS
+   - Provider: Proxy Provider (Forward Auth)
+   - External URL: `http://dns.homelab.internal` or `http://dns-primary.shared.homelab.internal`
+   - Forward auth mode: Traefik
+
+2. Assign users/groups who should have DNS admin access
+
+3. The Traefik middleware will automatically redirect unauthenticated users to Authentik login
+
+**Access Flow:**
+1. Navigate to `http://dns.homelab.internal` or `http://dns-primary.shared.homelab.internal`
+2. If not logged in, redirected to Authentik SSO login
+3. Login with Google/Microsoft or Authentik credentials
+4. Redirected back to Technitium web UI
+5. Session persists across all protected services
+
+**Security Notes:**
+- DNS queries (port 53) remain unauthenticated (required for DNS to function)
+- Web UI and API (port 5380) are protected by Authentik SSO
+- API tokens still work for automation (external-dns, scripts)
+- TSIG keys protect zone transfers between primary/secondary DNS
+
 ## Implementation Guide
 
 ### Phase 1: Deploy Technitium DNS Server
@@ -885,10 +955,14 @@ This DNS setup integrates with the multi-site architecture:
 5. Deploy secondary DNS at Site B (Phase 3)
 6. Deploy service proxy (Phase 5)
 7. Configure client DNS settings
+8. Deploy Authentik SSO (see `docs/AUTHENTICATION.md`)
+9. Apply Authentik forward-auth protection (`kubectl apply -f k8s-apps/dns/technitium-auth.yaml`)
+10. Configure Technitium application in Authentik web UI
 
 ## References
 
 - [Technitium DNS Server](https://technitium.com/dns/)
 - [External-DNS Documentation](https://github.com/kubernetes-sigs/external-dns)
 - [Traefik Documentation](https://doc.traefik.io/traefik/)
+- [Authentik Documentation](https://goauthentik.io/docs/)
 - [RFC 2136 (Dynamic DNS Updates)](https://datatracker.ietf.org/doc/html/rfc2136)

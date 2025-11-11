@@ -1,0 +1,73 @@
+---
+# Authentik Forward-Auth Protection for Technitium DNS
+# This adds SSO protection to Technitium's web UI and API
+# Deploy this AFTER Authentik is configured
+
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: authentik-forwardauth
+  namespace: dns-system
+spec:
+  forwardAuth:
+    address: http://authentik.auth.svc.cluster.local/outpost.goauthentik.io/auth/traefik
+    trustForwardHeader: true
+    authResponseHeaders:
+      - X-authentik-username
+      - X-authentik-groups
+      - X-authentik-email
+      - X-authentik-name
+      - X-authentik-uid
+---
+# Protected IngressRoute for Primary DNS
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: technitium-primary-protected
+  namespace: dns-system
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`dns-primary.shared.homelab.internal`) || Host(`dns.homelab.internal`)
+      kind: Rule
+      middlewares:
+        - name: authentik-forwardauth
+      services:
+        - name: technitium-primary
+          port: 5380
+---
+# Protected IngressRoute for Secondary DNS (if deployed on k8s)
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: technitium-secondary-protected
+  namespace: dns-system
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`dns-secondary.shared.homelab.internal`)
+      kind: Rule
+      middlewares:
+        - name: authentik-forwardauth
+      services:
+        - name: technitium-secondary
+          port: 5380
+---
+# ServiceMonitor for monitoring Technitium (no auth needed for metrics)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: technitium-dns
+  namespace: dns-system
+spec:
+  selector:
+    matchLabels:
+      app: technitium-dns
+  endpoints:
+    - port: web
+      path: /api/stats/get
+      interval: 30s
