@@ -1,0 +1,378 @@
+---
+# Authentik - Identity Provider & SSO
+# Provides OAuth2/OIDC, LDAP, SAML authentication
+# Integrates with Google, Microsoft, and other providers
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auth
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: authentik-secrets
+  namespace: auth
+type: Opaque
+stringData:
+  # Generate with: openssl rand -base64 32
+  secret-key: "CHANGE_ME_SECRET_KEY"
+  
+  # PostgreSQL password
+  postgres-password: "CHANGE_ME_POSTGRES_PASSWORD"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-config
+  namespace: auth
+data:
+  # Authentik configuration
+  # See: https://goauthentik.io/docs/installation/configuration
+  AUTHENTIK_REDIS__HOST: "authentik-redis"
+  AUTHENTIK_POSTGRESQL__HOST: "authentik-postgresql"
+  AUTHENTIK_POSTGRESQL__NAME: "authentik"
+  AUTHENTIK_POSTGRESQL__USER: "authentik"
+  AUTHENTIK_LISTEN__HTTP: "0.0.0.0:9000"
+  AUTHENTIK_LISTEN__HTTPS: "0.0.0.0:9443"
+  AUTHENTIK_LOG_LEVEL: "info"
+  
+  # Email configuration (optional)
+  AUTHENTIK_EMAIL__HOST: "smtp.gmail.com"
+  AUTHENTIK_EMAIL__PORT: "587"
+  AUTHENTIK_EMAIL__USE_TLS: "true"
+  AUTHENTIK_EMAIL__FROM: "authentik@yourdomain.com"
+---
+# PostgreSQL for Authentik
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: authentik-postgresql
+  namespace: auth
+spec:
+  serviceName: authentik-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-postgresql
+  template:
+    metadata:
+      labels:
+        app: authentik-postgresql
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: postgres-password
+            - name: POSTGRES_USER
+              value: authentik
+            - name: POSTGRES_DB
+              value: authentik
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-postgresql
+  namespace: auth
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: authentik-postgresql
+---
+# Redis for Authentik
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-redis
+  namespace: auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-redis
+  template:
+    metadata:
+      labels:
+        app: authentik-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-redis
+  namespace: auth
+spec:
+  ports:
+    - port: 6379
+  selector:
+    app: authentik-redis
+---
+# Authentik Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-server
+  namespace: auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: authentik-server
+  template:
+    metadata:
+      labels:
+        app: authentik-server
+    spec:
+      containers:
+        - name: authentik
+          image: ghcr.io/goauthentik/server:2024.2.2
+          command:
+            - /lifecycle/ak
+            - server
+          env:
+            - name: AUTHENTIK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: secret-key
+            - name: AUTHENTIK_POSTGRESQL__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: postgres-password
+          envFrom:
+            - configMapRef:
+                name: authentik-config
+          ports:
+            - name: http
+              containerPort: 9000
+            - name: https
+              containerPort: 9443
+          volumeMounts:
+            - name: media
+              mountPath: /media
+            - name: templates
+              mountPath: /templates
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+      volumes:
+        - name: media
+          persistentVolumeClaim:
+            claimName: authentik-media
+        - name: templates
+          emptyDir: {}
+---
+# Authentik Worker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-worker
+  namespace: auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-worker
+  template:
+    metadata:
+      labels:
+        app: authentik-worker
+    spec:
+      containers:
+        - name: authentik
+          image: ghcr.io/goauthentik/server:2024.2.2
+          command:
+            - /lifecycle/ak
+            - worker
+          env:
+            - name: AUTHENTIK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: secret-key
+            - name: AUTHENTIK_POSTGRESQL__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: postgres-password
+          envFrom:
+            - configMapRef:
+                name: authentik-config
+          volumeMounts:
+            - name: media
+              mountPath: /media
+            - name: templates
+              mountPath: /templates
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: media
+          persistentVolumeClaim:
+            claimName: authentik-media
+        - name: templates
+          emptyDir: {}
+---
+# PVC for Authentik media
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: authentik-media
+  namespace: auth
+spec:
+  accessModes:
+    - ReadWriteMany  # Needed for multiple replicas
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Authentik Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik
+  namespace: auth
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "auth.shared.homelab.internal"
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.147.17.110  # Authentik VIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 9000
+    - name: https
+      port: 443
+      targetPort: 9443
+  selector:
+    app: authentik-server
+---
+# LDAP Outpost for legacy integrations
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-ldap
+  namespace: auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: authentik-ldap
+  template:
+    metadata:
+      labels:
+        app: authentik-ldap
+    spec:
+      containers:
+        - name: ldap
+          image: ghcr.io/goauthentik/ldap:2024.2.2
+          env:
+            - name: AUTHENTIK_HOST
+              value: "http://authentik.auth.svc.cluster.local"
+            - name: AUTHENTIK_INSECURE
+              value: "true"
+            - name: AUTHENTIK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: outpost-token
+          ports:
+            - name: ldap
+              containerPort: 3389
+            - name: ldaps
+              containerPort: 6636
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-ldap
+  namespace: auth
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "ldap.shared.homelab.internal"
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.147.17.111  # LDAP VIP
+  ports:
+    - name: ldap
+      port: 389
+      targetPort: 3389
+    - name: ldaps
+      port: 636
+      targetPort: 6636
+  selector:
+    app: authentik-ldap
+---
+# Traefik IngressRoute for Authentik
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: authentik
+  namespace: auth
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`auth.homelab.internal`) || Host(`auth.shared.homelab.internal`)
+      kind: Rule
+      services:
+        - name: authentik
+          port: 80
