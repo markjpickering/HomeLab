@@ -13,12 +13,12 @@ export HOMELAB_WSL_DISTRO_NAME="${HOMELAB_WSL_DISTRO_NAME:-HomeLab-Debian}"
 
 # Site Definitions
 export HOMELAB_PRIMARY_SITE_ID="${HOMELAB_PRIMARY_SITE_ID:-primary}"
-export HOMELAB_PRIMARY_SITE_NAME="${HOMELAB_PRIMARY_SITE_NAME:-Home}"  # Human-readable name
-export HOMELAB_PRIMARY_SITE_LOCATION="${HOMELAB_PRIMARY_SITE_LOCATION:-Home Lab}"  # Full description
+export HOMELAB_PRIMARY_SITE_NAME="${HOMELAB_PRIMARY_SITE_NAME:-Pickerings Home}"  # Human-readable name
+export HOMELAB_PRIMARY_SITE_LOCATION="${HOMELAB_PRIMARY_SITE_LOCATION:-Pickering Family Home Lab}"  # Full description
 
 export HOMELAB_SECONDARY_SITE_ID="${HOMELAB_SECONDARY_SITE_ID:-secondary}"
-export HOMELAB_SECONDARY_SITE_NAME="${HOMELAB_SECONDARY_SITE_NAME:-Remote}"  # Human-readable name
-export HOMELAB_SECONDARY_SITE_LOCATION="${HOMELAB_SECONDARY_SITE_LOCATION:-Remote Location}"  # Full description
+export HOMELAB_SECONDARY_SITE_NAME="${HOMELAB_SECONDARY_SITE_NAME:-Sheilas Home}"  # Human-readable name
+export HOMELAB_SECONDARY_SITE_LOCATION="${HOMELAB_SECONDARY_SITE_LOCATION:-Sheila's Home Lab}"  # Full description
 
 # DNS Configuration
 export HOMELAB_DNS_DOMAIN="${HOMELAB_DNS_DOMAIN:-homelab.internal}"
