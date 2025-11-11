@@ -1,0 +1,78 @@
+name: Bootstrap HomeLab Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'Phase to run (1=all, 2=ztnet, 3=network, 4=provision, 5=k3s, 6=provision+k3s)'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+          - '6'
+      site:
+        description: 'Site to bootstrap (primary, secondary, or both)'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - primary
+          - secondary
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.BOOTSTRAP_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.BOOTSTRAP_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Install tools
+        run: |
+          # Install necessary tools
+          sudo apt-get update
+          sudo apt-get install -y sshpass rsync
+
+      - name: Copy repository to bootstrap host
+        run: |
+          rsync -avz --exclude '.git' \
+            -e "ssh -i ~/.ssh/id_rsa" \
+            ./ ${{ secrets.BOOTSTRAP_USER }}@${{ secrets.BOOTSTRAP_HOST }}:/root/homelab/
+
+      - name: Run bootstrap script
+        env:
+          PHASE: ${{ github.event.inputs.phase }}
+          SITE: ${{ github.event.inputs.site }}
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.BOOTSTRAP_USER }}@${{ secrets.BOOTSTRAP_HOST }} << 'EOF'
+            cd /root/homelab
+            source boostrap/config.sh
+            
+            # Load secrets from environment
+            export HOMELAB_ZEROTIER_NETWORK_ID="${{ secrets.ZEROTIER_NETWORK_ID }}"
+            
+            # Run bootstrap in non-interactive mode
+            bash boostrap/linux/bootstrap-infrastructure.sh -y -p ${{ github.event.inputs.phase }}
+          EOF
+
+      - name: Upload bootstrap logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-logs
+          path: |
+            /tmp/bootstrap-*.log
+          retention-days: 30

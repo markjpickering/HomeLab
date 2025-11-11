@@ -1,0 +1,118 @@
+name: Deploy to HomeLab Sites
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'k8s-apps/**'
+      - 'k8s-infra/**'
+      - '.github/workflows/deploy.yml'
+
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deployment target'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - primary
+          - secondary
+
+jobs:
+  deploy-primary:
+    name: Deploy to Primary Site
+    if: ${{ github.event.inputs.target == 'primary' || github.event.inputs.target == 'both' || github.event_name == 'push' }}
+    runs-on: [self-hosted, primary]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        run: |
+          # kubectl should already be available on self-hosted runner
+          kubectl version --client
+
+      - name: Apply k3s manifests
+        working-directory: k8s-apps
+        run: |
+          # Apply all manifests in order
+          for dir in */; do
+            if [ -d "$dir" ]; then
+              echo "Applying manifests from $dir"
+              kubectl apply -f "$dir" || echo "Warning: Some manifests in $dir failed"
+            fi
+          done
+
+      - name: Verify deployment
+        run: |
+          kubectl get nodes
+          kubectl get pods -A
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Primary site deployment successful"
+          else
+            echo "❌ Primary site deployment failed"
+            exit 1
+          fi
+
+  deploy-secondary:
+    name: Deploy to Secondary Site
+    if: ${{ github.event.inputs.target == 'secondary' || github.event.inputs.target == 'both' || github.event_name == 'push' }}
+    runs-on: [self-hosted, secondary]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        run: |
+          kubectl version --client
+
+      - name: Apply k3s manifests
+        working-directory: k8s-apps
+        run: |
+          # Apply all manifests in order
+          for dir in */; do
+            if [ -d "$dir" ]; then
+              echo "Applying manifests from $dir"
+              kubectl apply -f "$dir" || echo "Warning: Some manifests in $dir failed"
+            fi
+          done
+
+      - name: Verify deployment
+        run: |
+          kubectl get nodes
+          kubectl get pods -A
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Secondary site deployment successful"
+          else
+            echo "❌ Secondary site deployment failed"
+            exit 1
+          fi
+
+  notify:
+    name: Deployment Summary
+    needs: [deploy-primary, deploy-secondary]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Primary Site**: ${{ needs.deploy-primary.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Secondary Site**: ${{ needs.deploy-secondary.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Author**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
