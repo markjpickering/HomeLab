@@ -14,7 +14,7 @@ export HOMELAB_WSL_DISTRO_NAME="${HOMELAB_WSL_DISTRO_NAME:-HomeLab-Debian}"
 # ZeroTier Configuration
 export HOMELAB_ZEROTIER_NETWORK_NAME="${HOMELAB_ZEROTIER_NETWORK_NAME:-HomeLabK8s}"
 export HOMELAB_ZEROTIER_NETWORK_DESCRIPTION="${HOMELAB_ZEROTIER_NETWORK_DESCRIPTION:-HomeLab Kubernetes overlay network}"
-export HOMELAB_ZEROTIER_SUBNET="${HOMELAB_ZEROTIER_SUBNET:-10.147.17.0/24}"
+export HOMELAB_ZEROTIER_SUBNET="${HOMELAB_ZEROTIER_SUBNET:-10.147.0.0/16}"
 # Optional: pre-provide an existing network ID to skip creation
 export HOMELAB_ZEROTIER_NETWORK_ID="${HOMELAB_ZEROTIER_NETWORK_ID:-}"
 # Whether to join the bootstrap host to the ZT network (y/n)
