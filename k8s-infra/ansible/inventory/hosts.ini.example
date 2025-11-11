@@ -1,39 +1,43 @@
 # Ansible Inventory for k3s Multi-Site HomeLab
 # Replace ZeroTier IPs with your actual node IPs
+# 
+# Site names are configurable in boostrap/config.sh:
+#   HOMELAB_PRIMARY_SITE_ID (default: primary)
+#   HOMELAB_SECONDARY_SITE_ID (default: secondary)
 
-[k3s_servers_site_a]
-k3s-a-server-1 ansible_host=10.147.17.10 ansible_user=root site_name=site-a
+[k3s_servers_primary]
+k3s-primary-server-1 ansible_host=10.147.17.10 ansible_user=root site_name=primary site_human_name="Home"
 
-[k3s_agents_site_a]
-k3s-a-agent-1 ansible_host=10.147.17.11 ansible_user=root site_name=site-a
-k3s-a-agent-2 ansible_host=10.147.17.12 ansible_user=root site_name=site-a
+[k3s_agents_primary]
+k3s-primary-agent-1 ansible_host=10.147.17.11 ansible_user=root site_name=primary site_human_name="Home"
+k3s-primary-agent-2 ansible_host=10.147.17.12 ansible_user=root site_name=primary site_human_name="Home"
 
-[k3s_servers_site_b]
-k3s-b-server-1 ansible_host=10.147.17.20 ansible_user=root site_name=site-b
+[k3s_servers_secondary]
+k3s-secondary-server-1 ansible_host=10.147.17.20 ansible_user=root site_name=secondary site_human_name="Remote"
 
-[k3s_agents_site_b]
-k3s-b-agent-1 ansible_host=10.147.17.21 ansible_user=root site_name=site-b
-k3s-b-agent-2 ansible_host=10.147.17.22 ansible_user=root site_name=site-b
+[k3s_agents_secondary]
+k3s-secondary-agent-1 ansible_host=10.147.17.21 ansible_user=root site_name=secondary site_human_name="Remote"
+k3s-secondary-agent-2 ansible_host=10.147.17.22 ansible_user=root site_name=secondary site_human_name="Remote"
 
 # Group all servers
 [k3s_servers:children]
-k3s_servers_site_a
-k3s_servers_site_b
+k3s_servers_primary
+k3s_servers_secondary
 
 # Group all agents
 [k3s_agents:children]
-k3s_agents_site_a
-k3s_agents_site_b
+k3s_agents_primary
+k3s_agents_secondary
 
-# Site A cluster (all nodes)
-[cluster_site_a:children]
-k3s_servers_site_a
-k3s_agents_site_a
+# Primary site cluster (all nodes)
+[cluster_primary:children]
+k3s_servers_primary
+k3s_agents_primary
 
-# Site B cluster (all nodes)
-[cluster_site_b:children]
-k3s_servers_site_b
-k3s_agents_site_b
+# Secondary site cluster (all nodes)
+[cluster_secondary:children]
+k3s_servers_secondary
+k3s_agents_secondary
 
 # All k3s nodes
 [k3s_cluster:children]

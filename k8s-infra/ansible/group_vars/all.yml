@@ -1,0 +1,25 @@
+---
+# Global variables for all hosts
+# These map to constants defined in boostrap/config.sh
+
+# k3s version
+k3s_version: "{{ lookup('env', 'HOMELAB_K3S_VERSION') | default('v1.28.4+k3s2', true) }}"
+
+# Site configuration
+primary_site_id: "{{ lookup('env', 'HOMELAB_PRIMARY_SITE_ID') | default('primary', true) }}"
+secondary_site_id: "{{ lookup('env', 'HOMELAB_SECONDARY_SITE_ID') | default('secondary', true) }}"
+
+# DNS configuration
+dns_domain: "{{ lookup('env', 'HOMELAB_DNS_DOMAIN') | default('homelab.internal', true) }}"
+primary_dns_server: "{{ lookup('env', 'HOMELAB_PRIMARY_DNS_IP') | default('10.147.17.5', true) }}"
+secondary_dns_server: "{{ lookup('env', 'HOMELAB_SECONDARY_DNS_IP') | default('10.147.17.25', true) }}"
+
+# Cluster CIDR ranges
+k3s_cluster_cidr: "{{ lookup('env', 'HOMELAB_K3S_CLUSTER_CIDR') | default('10.42.0.0/16', true) }}"
+k3s_service_cidr: "{{ lookup('env', 'HOMELAB_K3S_SERVICE_CIDR') | default('10.43.0.0/16', true) }}"
+
+# Flannel backend (vxlan, wireguard, or host-gw)
+k3s_flannel_backend: "vxlan"
+
+# Python interpreter
+ansible_python_interpreter: /usr/bin/python3

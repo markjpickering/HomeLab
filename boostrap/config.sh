@@ -11,10 +11,25 @@ export HOMELAB_REPO_URL="${HOMELAB_REPO_URL:-https://github.com/YOUR_USERNAME/Ho
 export HOMELAB_INSTALL_DIR="${HOMELAB_INSTALL_DIR:-/root/homelab}"
 export HOMELAB_WSL_DISTRO_NAME="${HOMELAB_WSL_DISTRO_NAME:-HomeLab-Debian}"
 
+# Site Definitions
+export HOMELAB_PRIMARY_SITE_ID="${HOMELAB_PRIMARY_SITE_ID:-primary}"
+export HOMELAB_PRIMARY_SITE_NAME="${HOMELAB_PRIMARY_SITE_NAME:-Home}"  # Human-readable name
+export HOMELAB_PRIMARY_SITE_LOCATION="${HOMELAB_PRIMARY_SITE_LOCATION:-Home Lab}"  # Full description
+
+export HOMELAB_SECONDARY_SITE_ID="${HOMELAB_SECONDARY_SITE_ID:-secondary}"
+export HOMELAB_SECONDARY_SITE_NAME="${HOMELAB_SECONDARY_SITE_NAME:-Remote}"  # Human-readable name
+export HOMELAB_SECONDARY_SITE_LOCATION="${HOMELAB_SECONDARY_SITE_LOCATION:-Remote Location}"  # Full description
+
+# DNS Configuration
+export HOMELAB_DNS_DOMAIN="${HOMELAB_DNS_DOMAIN:-homelab.internal}"
+export HOMELAB_PRIMARY_DNS_SUBDOMAIN="${HOMELAB_PRIMARY_SITE_ID}.${HOMELAB_DNS_DOMAIN}"
+export HOMELAB_SECONDARY_DNS_SUBDOMAIN="${HOMELAB_SECONDARY_SITE_ID}.${HOMELAB_DNS_DOMAIN}"
+export HOMELAB_SHARED_DNS_SUBDOMAIN="shared.${HOMELAB_DNS_DOMAIN}"
+
 # ZeroTier Configuration
 export HOMELAB_ZEROTIER_NETWORK_NAME="${HOMELAB_ZEROTIER_NETWORK_NAME:-HomeLabK8s}"
 export HOMELAB_ZEROTIER_NETWORK_DESCRIPTION="${HOMELAB_ZEROTIER_NETWORK_DESCRIPTION:-HomeLab Kubernetes overlay network}"
-export HOMELAB_ZEROTIER_SUBNET="${HOMELAB_ZEROTIER_SUBNET:-10.147.0.0/16}"
+export HOMELAB_ZEROTIER_SUBNET="${HOMELAB_ZEROTIER_SUBNET:-10.147.17.0/24}"
 # Optional: pre-provide an existing network ID to skip creation
 export HOMELAB_ZEROTIER_NETWORK_ID="${HOMELAB_ZEROTIER_NETWORK_ID:-}"
 # Whether to join the bootstrap host to the ZT network (y/n)
@@ -39,9 +54,37 @@ export HOMELAB_TF_SECRETS_FILE="${HOMELAB_TF_SECRETS_FILE:-secrets.enc.yaml}"
 export HOMELAB_ANSIBLE_DIR="${HOMELAB_ANSIBLE_DIR:-k8s-infra/ansible}"
 export HOMELAB_ANSIBLE_INVENTORY="${HOMELAB_ANSIBLE_INVENTORY:-inventory/hosts.ini}"
 
-# Kubernetes Configuration
+# IP Ranges (ZeroTier network)
+export HOMELAB_PRIMARY_IP_RANGE="10.147.17.10-19"
+export HOMELAB_SECONDARY_IP_RANGE="10.147.17.20-29"
+export HOMELAB_SHARED_IP_RANGE="10.147.17.100-109"
+
+# Primary Site Node IPs
+export HOMELAB_PRIMARY_SERVER_IP="${HOMELAB_PRIMARY_SERVER_IP:-10.147.17.10}"
+export HOMELAB_PRIMARY_AGENT1_IP="${HOMELAB_PRIMARY_AGENT1_IP:-10.147.17.11}"
+export HOMELAB_PRIMARY_AGENT2_IP="${HOMELAB_PRIMARY_AGENT2_IP:-10.147.17.12}"
+
+# Secondary Site Node IPs
+export HOMELAB_SECONDARY_SERVER_IP="${HOMELAB_SECONDARY_SERVER_IP:-10.147.17.20}"
+export HOMELAB_SECONDARY_AGENT1_IP="${HOMELAB_SECONDARY_AGENT1_IP:-10.147.17.21}"
+export HOMELAB_SECONDARY_AGENT2_IP="${HOMELAB_SECONDARY_AGENT2_IP:-10.147.17.22}"
+
+# Shared Service VIPs
+export HOMELAB_VAULT_VIP="${HOMELAB_VAULT_VIP:-10.147.17.100}"
+export HOMELAB_REGISTRY_VIP="${HOMELAB_REGISTRY_VIP:-10.147.17.101}"
+export HOMELAB_MINIO_VIP="${HOMELAB_MINIO_VIP:-10.147.17.102}"
+export HOMELAB_PROXY_VIP="${HOMELAB_PROXY_VIP:-10.147.17.200}"
+
+# DNS Server IPs
+export HOMELAB_PRIMARY_DNS_IP="${HOMELAB_PRIMARY_DNS_IP:-10.147.17.5}"
+export HOMELAB_SECONDARY_DNS_IP="${HOMELAB_SECONDARY_DNS_IP:-10.147.17.25}"
+
+# k3s Configuration
+export HOMELAB_K3S_VERSION="${HOMELAB_K3S_VERSION:-v1.28.4+k3s2}"
+export HOMELAB_K3S_CLUSTER_CIDR="${HOMELAB_K3S_CLUSTER_CIDR:-10.42.0.0/16}"
+export HOMELAB_K3S_SERVICE_CIDR="${HOMELAB_K3S_SERVICE_CIDR:-10.43.0.0/16}"
 export HOMELAB_K8S_CONTROL_PLANE_COUNT="${HOMELAB_K8S_CONTROL_PLANE_COUNT:-1}"
-export HOMELAB_K8S_WORKER_COUNT="${HOMELAB_K8S_WORKER_COUNT:-3}"
+export HOMELAB_K8S_WORKER_COUNT="${HOMELAB_K8S_WORKER_COUNT:-2}"
 
 # Node Resource Defaults (for Terraform)
 export HOMELAB_CONTROL_PLANE_CORES="${HOMELAB_CONTROL_PLANE_CORES:-2}"
@@ -69,16 +112,67 @@ if [ -d ".git" ]; then
     fi
 fi
 
+# Helper Functions
+
+# Generate node name based on site, role, and number
+# Usage: generate_node_name primary server 1
+generate_node_name() {
+    local site_id=$1
+    local role=$2  # server or agent
+    local number=$3
+    echo "k3s-${site_id}-${role}-${number}"
+}
+
+# Get DNS name for a service
+# Usage: get_service_dns vault shared
+get_service_dns() {
+    local service=$1
+    local scope=$2  # primary, secondary, shared, or empty for shortcut
+    
+    case $scope in
+        primary)
+            echo "${service}.${HOMELAB_PRIMARY_DNS_SUBDOMAIN}"
+            ;;
+        secondary)
+            echo "${service}.${HOMELAB_SECONDARY_DNS_SUBDOMAIN}"
+            ;;
+        shared)
+            echo "${service}.${HOMELAB_SHARED_DNS_SUBDOMAIN}"
+            ;;
+        *)
+            # Shortcut (no subdomain)
+            echo "${service}.${HOMELAB_DNS_DOMAIN}"
+            ;;
+    esac
+}
+
+# Export helper functions
+export -f generate_node_name 2>/dev/null || true
+export -f get_service_dns 2>/dev/null || true
+
 # Function to display configuration
 show_config() {
     echo "HomeLab Bootstrap Configuration:"
-    echo "  Repository: $HOMELAB_REPO_URL"
-    echo "  Install Dir: $HOMELAB_INSTALL_DIR"
-    echo "  WSL Distro: $HOMELAB_WSL_DISTRO_NAME"
-    echo "  ZeroTier Network: $HOMELAB_ZEROTIER_NETWORK_NAME"
-    echo "  ZeroTier Subnet: $HOMELAB_ZEROTIER_SUBNET"
-    echo "  K8s Control Plane: $HOMELAB_K8S_CONTROL_PLANE_COUNT nodes"
-    echo "  K8s Workers: $HOMELAB_K8S_WORKER_COUNT nodes"
+    echo "================================"
+    echo ""
+    echo "Sites:"
+    echo "  Primary:   ${HOMELAB_PRIMARY_SITE_NAME} (${HOMELAB_PRIMARY_SITE_ID})"
+    echo "  Secondary: ${HOMELAB_SECONDARY_SITE_NAME} (${HOMELAB_SECONDARY_SITE_ID})"
+    echo ""
+    echo "DNS Domains:"
+    echo "  Base:      ${HOMELAB_DNS_DOMAIN}"
+    echo "  Primary:   ${HOMELAB_PRIMARY_DNS_SUBDOMAIN}"
+    echo "  Secondary: ${HOMELAB_SECONDARY_DNS_SUBDOMAIN}"
+    echo "  Shared:    ${HOMELAB_SHARED_DNS_SUBDOMAIN}"
+    echo ""
+    echo "Repository: ${HOMELAB_REPO_URL}"
+    echo "Install Dir: ${HOMELAB_INSTALL_DIR}"
+    echo "ZeroTier Network: ${HOMELAB_ZEROTIER_NETWORK_NAME}"
+    echo "ZeroTier Subnet: ${HOMELAB_ZEROTIER_SUBNET}"
+    echo "k3s Version: ${HOMELAB_K3S_VERSION}"
+    echo "Control Plane: ${HOMELAB_K8S_CONTROL_PLANE_COUNT} node(s) per site"
+    echo "Workers: ${HOMELAB_K8S_WORKER_COUNT} node(s) per site"
+    echo ""
 }
 
 # Load user overrides if they exist
