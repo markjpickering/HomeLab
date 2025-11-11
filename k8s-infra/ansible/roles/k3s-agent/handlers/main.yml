@@ -1,0 +1,11 @@
+---
+# handlers file for k3s-agent
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: restart k3s-agent
+  systemd:
+    name: k3s-agent
+    state: restarted

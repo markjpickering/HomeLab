@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  technitium-primary:
+    image: technitium/dns-server:latest
+    container_name: technitium-primary
+    hostname: dns-primary
+    ports:
+      - "5380:5380"     # Web UI
+      - "53:53/udp"     # DNS
+      - "53:53/tcp"     # DNS (TCP)
+    environment:
+      - DNS_SERVER_DOMAIN=dns-primary.homelab.internal
+      - DNS_SERVER_ADMIN_PASSWORD=${TECHNITIUM_ADMIN_PASSWORD}
+      - DNS_SERVER_PREFER_IPV6=false
+    volumes:
+      - ./config:/etc/dns
+      - ./logs:/var/log/dns
+    restart: unless-stopped
+    networks:
+      - homelab
+
+networks:
+  homelab:
+    driver: bridge

@@ -1,0 +1,11 @@
+---
+# handlers file for k3s-server
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: restart k3s
+  systemd:
+    name: k3s
+    state: restarted
