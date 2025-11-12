@@ -1,0 +1,250 @@
+---
+# Heimdall - Application Dashboard
+# Provides a beautiful landing page with links to all HomeLab services
+# Auto-discovery via annotations or manual configuration
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dashboard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: heimdall-config
+  namespace: dashboard
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heimdall
+  namespace: dashboard
+  labels:
+    app: heimdall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: heimdall
+  template:
+    metadata:
+      labels:
+        app: heimdall
+    spec:
+      containers:
+      - name: heimdall
+        image: linuxserver/heimdall:latest
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 443
+          name: https
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: heimdall-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: heimdall
+  namespace: dashboard
+  labels:
+    app: heimdall
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "dashboard.services.hl,home.hl"
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.147.17.200  # Proxy VIP for dashboard
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: heimdall
+---
+# IngressRoute for Traefik (primary site)
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: heimdall-primary
+  namespace: dashboard
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`dashboard.pickers.hl`) || Host(`home.pickers.hl`) || Host(`hl`)
+      kind: Rule
+      services:
+        - name: heimdall
+          port: 80
+---
+# IngressRoute for Traefik (secondary site)
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: heimdall-secondary
+  namespace: dashboard
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`dashboard.sheila.hl`) || Host(`home.sheila.hl`)
+      kind: Rule
+      services:
+        - name: heimdall
+          port: 80
+---
+# IngressRoute for shared access
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: heimdall-shared
+  namespace: dashboard
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`dashboard.services.hl`) || Host(`home.hl`)
+      kind: Rule
+      services:
+        - name: heimdall
+          port: 80
+---
+# ConfigMap with initial application links
+# These will be loaded on first startup - can be customized via Heimdall UI
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: heimdall-apps
+  namespace: dashboard
+data:
+  apps.json: |
+    {
+      "primary_site": {
+        "name": "Pickering's Home",
+        "apps": [
+          {
+            "name": "ArgoCD",
+            "url": "http://argocd.pickers.hl",
+            "description": "GitOps Continuous Deployment",
+            "icon": "argocd.png"
+          },
+          {
+            "name": "Grafana",
+            "url": "http://grafana.pickers.hl",
+            "description": "Metrics & Monitoring",
+            "icon": "grafana.png"
+          },
+          {
+            "name": "Traefik",
+            "url": "http://traefik.pickers.hl/dashboard/",
+            "description": "Ingress Controller Dashboard",
+            "icon": "traefik.png"
+          }
+        ]
+      },
+      "secondary_site": {
+        "name": "Sheila's Home",
+        "apps": [
+          {
+            "name": "ArgoCD",
+            "url": "http://argocd.sheila.hl",
+            "description": "GitOps Continuous Deployment",
+            "icon": "argocd.png"
+          },
+          {
+            "name": "Grafana",
+            "url": "http://grafana.sheila.hl",
+            "description": "Metrics & Monitoring",
+            "icon": "grafana.png"
+          },
+          {
+            "name": "Traefik",
+            "url": "http://traefik.sheila.hl/dashboard/",
+            "description": "Ingress Controller Dashboard",
+            "icon": "traefik.png"
+          }
+        ]
+      },
+      "shared_services": {
+        "name": "Shared Services",
+        "apps": [
+          {
+            "name": "Vault",
+            "url": "http://vault.services.hl",
+            "description": "Secrets Management",
+            "icon": "vault.png"
+          },
+          {
+            "name": "Harbor Registry",
+            "url": "http://registry.services.hl",
+            "description": "Container Registry",
+            "icon": "harbor.png"
+          },
+          {
+            "name": "MinIO",
+            "url": "http://minio.services.hl",
+            "description": "Object Storage",
+            "icon": "minio.png"
+          },
+          {
+            "name": "Authentik",
+            "url": "http://auth.services.hl",
+            "description": "Identity Provider & SSO",
+            "icon": "authentik.png"
+          },
+          {
+            "name": "Technitium DNS",
+            "url": "http://dns.services.hl",
+            "description": "DNS Management",
+            "icon": "technitium.png"
+          },
+          {
+            "name": "ZTnet",
+            "url": "http://ztnet.services.hl:3000",
+            "description": "ZeroTier Controller",
+            "icon": "zerotier.png"
+          }
+        ]
+      },
+      "infrastructure": {
+        "name": "Infrastructure",
+        "apps": [
+          {
+            "name": "Proxmox",
+            "url": "https://proxmox:8006",
+            "description": "Hypervisor Management",
+            "icon": "proxmox.png"
+          }
+        ]
+      }
+    }
