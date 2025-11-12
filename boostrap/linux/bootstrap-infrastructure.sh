@@ -694,9 +694,9 @@ phase25_setup_proxmox_zerotier() {
     log_info "========================================"
     
     # Check if Proxmox hosts are configured
-    if [ -z "${HOMELAB_PROXMOX_PRIMARY_HOST:-}" ] && [ -z "${HOMELAB_PROXMOX_SECONDARY_HOST:-}" ]; then
+    if [ -z "${HOMELAB_PROXMOX_PRIMARY_INITIAL_HOST:-}" ] && [ -z "${HOMELAB_PROXMOX_SECONDARY_INITIAL_HOST:-}" ]; then
         log_warning "No Proxmox hosts configured, skipping ZeroTier setup"
-        log_warning "Set HOMELAB_PROXMOX_PRIMARY_HOST and HOMELAB_PROXMOX_SECONDARY_HOST to enable"
+        log_warning "Set HOMELAB_PROXMOX_PRIMARY_INITIAL_HOST and HOMELAB_PROXMOX_SECONDARY_INITIAL_HOST to enable"
         return 0
     fi
     
@@ -716,36 +716,46 @@ phase25_setup_proxmox_zerotier() {
     fi
     
     # Setup primary Proxmox host
-    if [ -n "${HOMELAB_PROXMOX_PRIMARY_HOST:-}" ]; then
-        log_info "Setting up ZeroTier on primary Proxmox host: $HOMELAB_PROXMOX_PRIMARY_HOST"
+    if [ -n "${HOMELAB_PROXMOX_PRIMARY_INITIAL_HOST:-}" ]; then
+        log_info "Setting up ZeroTier on primary Proxmox host: $HOMELAB_PROXMOX_PRIMARY_INITIAL_HOST"
+        log_info "Target ZeroTier IP will be: ${HOMELAB_PROXMOX_PRIMARY_ZT_IP}"
         
-        # Copy script to Proxmox host
-        scp -o StrictHostKeyChecking=no "$setup_script" "${HOMELAB_PROXMOX_PRIMARY_HOST}:/tmp/setup-zerotier.sh"
+        # Copy script to Proxmox host (using physical IP)
+        scp -o StrictHostKeyChecking=no "$setup_script" "${HOMELAB_PROXMOX_PRIMARY_INITIAL_HOST}:/tmp/setup-zerotier.sh"
         
         # Run script on Proxmox host
-        ssh -o StrictHostKeyChecking=no "${HOMELAB_PROXMOX_PRIMARY_HOST}" \
-            "ZEROTIER_NETWORK_ID=$ZEROTIER_NETWORK_ID SITE_NAME=primary bash /tmp/setup-zerotier.sh"
+        ssh -o StrictHostKeyChecking=no "${HOMELAB_PROXMOX_PRIMARY_INITIAL_HOST}" \
+            "ZEROTIER_NETWORK_ID=$ZEROTIER_NETWORK_ID SITE_NAME=primary ZEROTIER_IP=${HOMELAB_PROXMOX_PRIMARY_ZT_IP} bash /tmp/setup-zerotier.sh"
         
         if [ $? -eq 0 ]; then
             log_success "Primary Proxmox host configured"
+            log_info "After authorization, Proxmox will be accessible at: root@${HOMELAB_PROXMOX_PRIMARY_ZT_IP}"
+            
+            # Update the active host variable to use ZT IP for subsequent operations
+            export HOMELAB_PROXMOX_PRIMARY_HOST="root@${HOMELAB_PROXMOX_PRIMARY_ZT_IP}"
         else
             log_warning "Primary Proxmox setup had issues, check logs"
         fi
     fi
     
     # Setup secondary Proxmox host
-    if [ -n "${HOMELAB_PROXMOX_SECONDARY_HOST:-}" ] && [ "$SINGLE_SITE" != "primary" ]; then
-        log_info "Setting up ZeroTier on secondary Proxmox host: $HOMELAB_PROXMOX_SECONDARY_HOST"
+    if [ -n "${HOMELAB_PROXMOX_SECONDARY_INITIAL_HOST:-}" ] && [ "$SINGLE_SITE" != "primary" ]; then
+        log_info "Setting up ZeroTier on secondary Proxmox host: $HOMELAB_PROXMOX_SECONDARY_INITIAL_HOST"
+        log_info "Target ZeroTier IP will be: ${HOMELAB_PROXMOX_SECONDARY_ZT_IP}"
         
-        # Copy script to Proxmox host
-        scp -o StrictHostKeyChecking=no "$setup_script" "${HOMELAB_PROXMOX_SECONDARY_HOST}:/tmp/setup-zerotier.sh"
+        # Copy script to Proxmox host (using physical IP)
+        scp -o StrictHostKeyChecking=no "$setup_script" "${HOMELAB_PROXMOX_SECONDARY_INITIAL_HOST}:/tmp/setup-zerotier.sh"
         
         # Run script on Proxmox host
-        ssh -o StrictHostKeyChecking=no "${HOMELAB_PROXMOX_SECONDARY_HOST}" \
-            "ZEROTIER_NETWORK_ID=$ZEROTIER_NETWORK_ID SITE_NAME=secondary bash /tmp/setup-zerotier.sh"
+        ssh -o StrictHostKeyChecking=no "${HOMELAB_PROXMOX_SECONDARY_INITIAL_HOST}" \
+            "ZEROTIER_NETWORK_ID=$ZEROTIER_NETWORK_ID SITE_NAME=secondary ZEROTIER_IP=${HOMELAB_PROXMOX_SECONDARY_ZT_IP} bash /tmp/setup-zerotier.sh"
         
         if [ $? -eq 0 ]; then
             log_success "Secondary Proxmox host configured"
+            log_info "After authorization, Proxmox will be accessible at: root@${HOMELAB_PROXMOX_SECONDARY_ZT_IP}"
+            
+            # Update the active host variable to use ZT IP for subsequent operations
+            export HOMELAB_PROXMOX_SECONDARY_HOST="root@${HOMELAB_PROXMOX_SECONDARY_ZT_IP}"
         else
             log_warning "Secondary Proxmox setup had issues, check logs"
         fi

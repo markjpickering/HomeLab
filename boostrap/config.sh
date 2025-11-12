@@ -71,30 +71,84 @@ export HOMELAB_TF_SECRETS_FILE="${HOMELAB_TF_SECRETS_FILE:-secrets.enc.yaml}"
 export HOMELAB_ANSIBLE_DIR="${HOMELAB_ANSIBLE_DIR:-k8s-infra/ansible}"
 export HOMELAB_ANSIBLE_INVENTORY="${HOMELAB_ANSIBLE_INVENTORY:-inventory/hosts.ini}"
 
-# IP Ranges (ZeroTier network)
+# IPv4 Ranges (ZeroTier network) - Memorable allocation scheme
+# .1       - Reserved (network)
+# .2-.9    - Infrastructure (Proxmox hosts, DNS, etc)
+# .10-.19  - Primary site k8s nodes
+# .20-.29  - Secondary site k8s nodes
+# .100-119 - Shared services (load balancer VIPs)
+# .120-139 - Primary site services
+# .140-159 - Secondary site services
+# .200-254 - Dynamic/DHCP pool (if needed)
+# .255     - Reserved (broadcast)
 export HOMELAB_PRIMARY_IP_RANGE="10.147.17.10-19"
 export HOMELAB_SECONDARY_IP_RANGE="10.147.17.20-29"
-export HOMELAB_SHARED_IP_RANGE="10.147.17.100-109"
+export HOMELAB_SHARED_IP_RANGE="10.147.17.100-119"
+export HOMELAB_PRIMARY_SERVICES_RANGE="10.147.17.120-139"
+export HOMELAB_SECONDARY_SERVICES_RANGE="10.147.17.140-159"
 
-# Primary Site Node IPs
-export HOMELAB_PRIMARY_SERVER_IP="${HOMELAB_PRIMARY_SERVER_IP:-10.147.17.10}"
-export HOMELAB_PRIMARY_AGENT1_IP="${HOMELAB_PRIMARY_AGENT1_IP:-10.147.17.11}"
-export HOMELAB_PRIMARY_AGENT2_IP="${HOMELAB_PRIMARY_AGENT2_IP:-10.147.17.12}"
+# IPv6 Configuration (ULA - Unique Local Address)
+# Using fd00::/8 prefix as per RFC 4193
+# Generated ULA prefix: fd42:147:17::/48 (locally administered)
+# Subnet allocation:
+#   fd42:147:17:1::/64  - Primary site
+#   fd42:147:17:2::/64  - Secondary site  
+#   fd42:147:17:f::/64  - Shared services
+export HOMELAB_IPV6_ENABLED="${HOMELAB_IPV6_ENABLED:-true}"
+export HOMELAB_IPV6_ULA_PREFIX="${HOMELAB_IPV6_ULA_PREFIX:-fd42:147:17}"
+export HOMELAB_PRIMARY_IPV6_SUBNET="${HOMELAB_PRIMARY_IPV6_SUBNET:-fd42:147:17:1::/64}"
+export HOMELAB_SECONDARY_IPV6_SUBNET="${HOMELAB_SECONDARY_IPV6_SUBNET:-fd42:147:17:2::/64}"
+export HOMELAB_SHARED_IPV6_SUBNET="${HOMELAB_SHARED_IPV6_SUBNET:-fd42:147:17:f::/64}"
 
-# Secondary Site Node IPs
-export HOMELAB_SECONDARY_SERVER_IP="${HOMELAB_SECONDARY_SERVER_IP:-10.147.17.20}"
-export HOMELAB_SECONDARY_AGENT1_IP="${HOMELAB_SECONDARY_AGENT1_IP:-10.147.17.21}"
-export HOMELAB_SECONDARY_AGENT2_IP="${HOMELAB_SECONDARY_AGENT2_IP:-10.147.17.22}"
+# Primary Site Node IPs (IPv4 - memorable: .10-19 range)
+export HOMELAB_PRIMARY_SERVER_IP="${HOMELAB_PRIMARY_SERVER_IP:-10.147.17.10}"   # .10 = primary server
+export HOMELAB_PRIMARY_AGENT1_IP="${HOMELAB_PRIMARY_AGENT1_IP:-10.147.17.11}"   # .11 = primary agent 1
+export HOMELAB_PRIMARY_AGENT2_IP="${HOMELAB_PRIMARY_AGENT2_IP:-10.147.17.12}"   # .12 = primary agent 2
 
-# Shared Service VIPs
-export HOMELAB_VAULT_VIP="${HOMELAB_VAULT_VIP:-10.147.17.100}"
-export HOMELAB_REGISTRY_VIP="${HOMELAB_REGISTRY_VIP:-10.147.17.101}"
-export HOMELAB_MINIO_VIP="${HOMELAB_MINIO_VIP:-10.147.17.102}"
-export HOMELAB_PROXY_VIP="${HOMELAB_PROXY_VIP:-10.147.17.200}"
+# Primary Site Node IPs (IPv6)
+export HOMELAB_PRIMARY_SERVER_IPV6="${HOMELAB_PRIMARY_SERVER_IPV6:-fd42:147:17:1::10}"
+export HOMELAB_PRIMARY_AGENT1_IPV6="${HOMELAB_PRIMARY_AGENT1_IPV6:-fd42:147:17:1::11}"
+export HOMELAB_PRIMARY_AGENT2_IPV6="${HOMELAB_PRIMARY_AGENT2_IPV6:-fd42:147:17:1::12}"
 
-# DNS Server IPs
-export HOMELAB_PRIMARY_DNS_IP="${HOMELAB_PRIMARY_DNS_IP:-10.147.17.5}"
-export HOMELAB_SECONDARY_DNS_IP="${HOMELAB_SECONDARY_DNS_IP:-10.147.17.25}"
+# Secondary Site Node IPs (IPv4 - memorable: .20-29 range)
+export HOMELAB_SECONDARY_SERVER_IP="${HOMELAB_SECONDARY_SERVER_IP:-10.147.17.20}"  # .20 = secondary server
+export HOMELAB_SECONDARY_AGENT1_IP="${HOMELAB_SECONDARY_AGENT1_IP:-10.147.17.21}"  # .21 = secondary agent 1
+export HOMELAB_SECONDARY_AGENT2_IP="${HOMELAB_SECONDARY_AGENT2_IP:-10.147.17.22}"  # .22 = secondary agent 2
+
+# Secondary Site Node IPs (IPv6)
+export HOMELAB_SECONDARY_SERVER_IPV6="${HOMELAB_SECONDARY_SERVER_IPV6:-fd42:147:17:2::20}"
+export HOMELAB_SECONDARY_AGENT1_IPV6="${HOMELAB_SECONDARY_AGENT1_IPV6:-fd42:147:17:2::21}"
+export HOMELAB_SECONDARY_AGENT2_IPV6="${HOMELAB_SECONDARY_AGENT2_IPV6:-fd42:147:17:2::22}"
+
+# Shared Service VIPs (IPv4 - memorable: .100-119 range for shared services)
+export HOMELAB_VAULT_VIP="${HOMELAB_VAULT_VIP:-10.147.17.100}"           # .100 = Vault
+export HOMELAB_REGISTRY_VIP="${HOMELAB_REGISTRY_VIP:-10.147.17.101}"     # .101 = Harbor Registry
+export HOMELAB_MINIO_VIP="${HOMELAB_MINIO_VIP:-10.147.17.102}"           # .102 = MinIO
+export HOMELAB_AUTHENTIK_VIP="${HOMELAB_AUTHENTIK_VIP:-10.147.17.110}"   # .110 = Authentik
+export HOMELAB_LDAP_VIP="${HOMELAB_LDAP_VIP:-10.147.17.111}"             # .111 = LDAP
+export HOMELAB_PROXY_VIP="${HOMELAB_PROXY_VIP:-10.147.17.200}"           # .200 = Traefik/Proxy
+
+# Primary Site Service VIPs (IPv4 - memorable: .120-139 range)
+export HOMELAB_PRIMARY_HOMEASSISTANT_VIP="${HOMELAB_PRIMARY_HOMEASSISTANT_VIP:-10.147.17.120}"  # .120 = Home Assistant (primary)
+
+# Secondary Site Service VIPs (IPv4 - memorable: .140-159 range)
+export HOMELAB_SECONDARY_HOMEASSISTANT_VIP="${HOMELAB_SECONDARY_HOMEASSISTANT_VIP:-10.147.17.121}"  # .121 = Home Assistant (secondary)
+
+# Shared Service VIPs (IPv6)
+export HOMELAB_VAULT_VIP6="${HOMELAB_VAULT_VIP6:-fd42:147:17:f::100}"
+export HOMELAB_REGISTRY_VIP6="${HOMELAB_REGISTRY_VIP6:-fd42:147:17:f::101}"
+export HOMELAB_MINIO_VIP6="${HOMELAB_MINIO_VIP6:-fd42:147:17:f::102}"
+export HOMELAB_AUTHENTIK_VIP6="${HOMELAB_AUTHENTIK_VIP6:-fd42:147:17:f::110}"
+export HOMELAB_LDAP_VIP6="${HOMELAB_LDAP_VIP6:-fd42:147:17:f::111}"
+export HOMELAB_PROXY_VIP6="${HOMELAB_PROXY_VIP6:-fd42:147:17:f::200}"
+
+# DNS Server IPs (IPv4 - memorable: .5 for DNS servers)
+export HOMELAB_PRIMARY_DNS_IP="${HOMELAB_PRIMARY_DNS_IP:-10.147.17.5}"       # .5 = Primary DNS (Technitium)
+export HOMELAB_SECONDARY_DNS_IP="${HOMELAB_SECONDARY_DNS_IP:-10.147.17.25}"  # .25 = Secondary DNS (Technitium replica)
+
+# DNS Server IPs (IPv6)
+export HOMELAB_PRIMARY_DNS_IPV6="${HOMELAB_PRIMARY_DNS_IPV6:-fd42:147:17:1::5}"
+export HOMELAB_SECONDARY_DNS_IPV6="${HOMELAB_SECONDARY_DNS_IPV6:-fd42:147:17:2::25}"
 
 # k3s Configuration
 export HOMELAB_K3S_VERSION="${HOMELAB_K3S_VERSION:-v1.28.4+k3s2}"
@@ -112,10 +166,22 @@ export HOMELAB_WORKER_CORES="${HOMELAB_WORKER_CORES:-4}"
 export HOMELAB_WORKER_MEMORY="${HOMELAB_WORKER_MEMORY:-8192}"
 export HOMELAB_WORKER_DISK="${HOMELAB_WORKER_DISK:-64}"
 
-# Proxmox Configuration (if using Proxmox)
-# These can be physical IPs (for initial setup) or ZeroTier IPs (after ZT setup)
-export HOMELAB_PROXMOX_PRIMARY_HOST="${HOMELAB_PROXMOX_PRIMARY_HOST:-}"  # e.g. root@192.168.1.10 or root@10.147.17.2
-export HOMELAB_PROXMOX_SECONDARY_HOST="${HOMELAB_PROXMOX_SECONDARY_HOST:-}"  # e.g. root@192.168.2.10 or root@10.147.17.3
+# Proxmox Configuration
+# IMPORTANT: Use physical IPs for INITIAL_HOST during bootstrap
+# After Proxmox joins ZeroTier, scripts will automatically use ZT_IP
+# Physical IPs are only used once to install ZeroTier on Proxmox hosts
+
+# Primary Proxmox Host
+export HOMELAB_PROXMOX_PRIMARY_INITIAL_HOST="${HOMELAB_PROXMOX_PRIMARY_INITIAL_HOST:-}"  # e.g. root@192.168.1.10 (physical network)
+export HOMELAB_PROXMOX_PRIMARY_ZT_IP="${HOMELAB_PROXMOX_PRIMARY_ZT_IP:-10.147.17.2}"     # ZeroTier IP (memorable: .2 for primary Proxmox)
+
+# Secondary Proxmox Host
+export HOMELAB_PROXMOX_SECONDARY_INITIAL_HOST="${HOMELAB_PROXMOX_SECONDARY_INITIAL_HOST:-}"  # e.g. root@192.168.2.10 (physical network)
+export HOMELAB_PROXMOX_SECONDARY_ZT_IP="${HOMELAB_PROXMOX_SECONDARY_ZT_IP:-10.147.17.3}"       # ZeroTier IP (memorable: .3 for secondary Proxmox)
+
+# Legacy compatibility - will use INITIAL_HOST if ZT not yet configured, otherwise ZT_IP
+export HOMELAB_PROXMOX_PRIMARY_HOST="${HOMELAB_PROXMOX_PRIMARY_HOST:-${HOMELAB_PROXMOX_PRIMARY_INITIAL_HOST}}"
+export HOMELAB_PROXMOX_SECONDARY_HOST="${HOMELAB_PROXMOX_SECONDARY_HOST:-${HOMELAB_PROXMOX_SECONDARY_INITIAL_HOST}}"
 
 # Proxmox node names (used in Terraform)
 export HOMELAB_PROXMOX_PRIMARY_NODE="${HOMELAB_PROXMOX_PRIMARY_NODE:-pve-primary}"
