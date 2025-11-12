@@ -11,6 +11,7 @@
 #   -z, --ztnet-only          Remove only ztnet controller
 #   -p, --proxmox-zt          Remove ZeroTier from Proxmox hosts only
 #   -s, --site <site>         Teardown single site only (primary|secondary)
+#   -d, --delete-data         Delete persistent data (volumes, databases, network ID)
 #   -y, --yes                 Skip confirmation prompts
 #   -h, --help                Show this help
 #
@@ -22,6 +23,7 @@ set -e
 TEARDOWN_MODE=""
 SINGLE_SITE=""
 SKIP_CONFIRMATION=false
+DELETE_DATA=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -44,6 +46,10 @@ while [[ $# -gt 0 ]]; do
         -s|--site)
             SINGLE_SITE="$2"
             shift 2
+            ;;
+        -d|--delete-data)
+            DELETE_DATA=true
+            shift
             ;;
         -y|--yes)
             SKIP_CONFIRMATION=true
@@ -200,7 +206,7 @@ teardown_proxmox_zerotier() {
 }
 
 teardown_ztnet() {
-    log_info "Removing ztnet controller..."
+    log_info "Stopping ztnet controller..."
     
     if [ ! -d "$ZTNET_DIR" ]; then
         log_warning "ztnet directory not found: $ZTNET_DIR"
@@ -211,20 +217,30 @@ teardown_ztnet() {
     
     if ! docker-compose ps 2>/dev/null | grep -q "Up"; then
         log_warning "ztnet controller not running"
+        return
     fi
     
-    if confirm "This will destroy the ztnet controller and database. Continue?" "n"; then
-        docker-compose down -v
-        log_success "ztnet controller removed"
-        
-        if [ -f "$NETWORK_ID_FILE" ]; then
-            if confirm "Remove saved network ID file?" "y"; then
+    if [ "$DELETE_DATA" = true ]; then
+        if confirm "This will destroy the ztnet controller AND database. Continue?" "n"; then
+            docker-compose down -v
+            log_success "ztnet controller and data removed"
+            
+            if [ -f "$NETWORK_ID_FILE" ]; then
                 rm "$NETWORK_ID_FILE"
                 log_success "Network ID file removed"
             fi
+        else
+            log_info "Skipping ztnet removal"
         fi
     else
-        log_info "Skipping ztnet removal"
+        if confirm "This will stop the ztnet controller (data will be preserved). Continue?" "y"; then
+            docker-compose down
+            log_success "ztnet controller stopped (data preserved)"
+            log_info "Volumes preserved: ztnet_postgres-data, ztnet_ztnet-data"
+            log_info "To delete data later, run with -d/--delete-data flag"
+        else
+            log_info "Skipping ztnet removal"
+        fi
     fi
 }
 
@@ -233,8 +249,14 @@ teardown_all() {
     log_warning "This will destroy:"
     log_warning "  - All Kubernetes infrastructure"
     log_warning "  - ZeroTier configuration on Proxmox hosts"
-    log_warning "  - ztnet controller and database"
-    log_warning "  - Saved network ID"
+    log_warning "  - ztnet controller (stopped)"
+    
+    if [ "$DELETE_DATA" = true ]; then
+        log_warning "  - ztnet database and volumes (--delete-data specified)"
+        log_warning "  - Saved network ID"
+    else
+        log_info "Persistent data will be preserved (use -d to delete)"
+    fi
     echo ""
     
     if ! confirm "Are you absolutely sure you want to proceed?" "n"; then
@@ -319,3 +341,8 @@ log_info "  - Bootstrap host and tools"
 log_info "  - Terraform state backups"
 log_info "  - Configuration files (config.sh, .env)"
 log_info "  - Source code repository"
+
+if [ "$DELETE_DATA" != true ]; then
+    log_info "  - ztnet volumes and database (use -d to delete)"
+    log_info "  - Network ID file"
+fi

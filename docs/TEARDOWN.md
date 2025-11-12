@@ -13,9 +13,14 @@ The script will prompt you for what to destroy.
 
 ### Complete Teardown (Everything)
 ```bash
-bash teardown-infrastructure.sh --all --yes
+bash teardown-infrastructure.sh --all
 ```
-**⚠️ WARNING**: This destroys all infrastructure without prompting!
+**Note**: By default, persistent data (volumes, databases) is preserved.
+
+```bash
+bash teardown-infrastructure.sh --all --delete-data --yes
+```
+**⚠️ WARNING**: This destroys all infrastructure AND data without prompting!
 
 ## Usage Options
 
@@ -29,8 +34,14 @@ bash teardown-infrastructure.sh --all
 Destroys:
 - All Kubernetes infrastructure (VMs)
 - ZeroTier configuration on Proxmox hosts
-- ztnet controller and database
-- Saved network ID file
+- ztnet controller (stopped)
+
+Preserves by default:
+- ztnet volumes and database
+- Network ID file
+- Terraform state backups
+
+Add `-d/--delete-data` to also delete persistent data.
 
 ### Kubernetes Infrastructure Only
 ```bash
@@ -57,7 +68,12 @@ bash teardown-infrastructure.sh -z
 bash teardown-infrastructure.sh --ztnet-only
 ```
 
-Stops and removes ztnet controller and database.
+Stops ztnet controller (preserves database by default).
+
+To also delete the database:
+```bash
+bash teardown-infrastructure.sh -z -d
+```
 
 ### Single Site Teardown
 ```bash
@@ -83,34 +99,44 @@ bash teardown-infrastructure.sh --all --yes
 Options:
   -a, --all                 Complete teardown (everything)
   -k, --k8s-only            Destroy only Kubernetes infrastructure
-  -z, --ztnet-only          Remove only ztnet controller
+  -z, --ztnet-only          Stop ztnet controller (preserves data by default)
   -p, --proxmox-zt          Remove ZeroTier from Proxmox hosts only
   -s, --site <site>         Teardown single site only (primary|secondary)
+  -d, --delete-data         Delete persistent data (volumes, databases, network ID)
   -y, --yes                 Skip confirmation prompts
   -h, --help                Show help
 ```
 
 ## What Gets Destroyed vs. Preserved
 
-### Destroyed by `-a/--all`:
+### Destroyed by `-a/--all` (without `-d`):
 - ✗ All Kubernetes VMs and containers
 - ✗ ZeroTier configuration on Proxmox hosts
-- ✗ ztnet controller and database
-- ✗ Saved ZeroTier network ID (`.zerotier-network-id`)
+- ✗ ztnet controller (stopped)
 
-### Always Preserved:
+### Preserved by default (without `-d`):
+- ✓ ztnet volumes and database
+- ✓ Saved ZeroTier network ID (`.zerotier-network-id`)
 - ✓ Bootstrap host and installed tools
 - ✓ Terraform state backups (`.tfstate.backup`)
 - ✓ Configuration files (`config.sh`, `.env`)
 - ✓ Source code repository
 - ✓ Documentation
 
+### Additionally destroyed with `-d/--delete-data`:
+- ✗ ztnet database and volumes
+- ✗ Saved ZeroTier network ID
+
 ## Common Workflows
 
 ### Test and Rebuild
 ```bash
-# Destroy and test bootstrap again
+# Destroy and test bootstrap again (preserves ztnet data)
 bash teardown-infrastructure.sh -a -y
+bash bootstrap-infrastructure.sh
+
+# Complete clean rebuild (delete everything including data)
+bash teardown-infrastructure.sh -a -d -y
 bash bootstrap-infrastructure.sh
 
 # Or just rebuild k8s cluster
@@ -159,11 +185,12 @@ terraform destroy
 ssh root@<proxmox-ip>
 zerotier-cli leave <network-id>
 
-# 3. Stop and remove ztnet controller
+# 3. Stop ztnet controller (preserves data)
 cd ~/homelab/boostrap/ztnet
-docker-compose down -v
+docker-compose down
 
-# 4. Remove saved network ID
+# 3a. Or stop and delete data
+docker-compose down -v
 rm ~/homelab/.zerotier-network-id
 ```
 
