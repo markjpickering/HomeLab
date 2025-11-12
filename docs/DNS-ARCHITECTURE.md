@@ -32,21 +32,39 @@ This document describes the DNS infrastructure for automatic service discovery a
 
 ## DNS Zones and Naming Convention
 
-### Primary Zone
-- **Domain**: `homelab.internal` (or `homelab.local`)
-- **Zone type**: Authoritative, Primary
-- **Replication**: Primary at Site A → Secondary at Site B
+### Domain Structure
+
+The HomeLab uses **site-specific domains** for maximum flexibility:
+
+- **Primary site domain**: `pickers.hl` (configurable via `HOMELAB_PRIMARY_DNS_DOMAIN`)
+- **Secondary site domain**: `sheila.hl` (configurable via `HOMELAB_SECONDARY_DNS_DOMAIN`)
+- **Shared services domain**: `shared.homelab.internal` (configurable via `HOMELAB_SHARED_DNS_DOMAIN`)
+- **Base domain**: `homelab.internal` (configurable via `HOMELAB_DNS_DOMAIN`)
+
+Each site has its own independent DNS zone, allowing:
+- Different TLDs per site (`.hl`, `.home`, `.local`, etc.)
+- Separate zone management
+- Site-specific DNS policies
+- Easy migration or domain changes per site
+
+**Configuration**: Set in `boostrap/config.sh`:
+```bash
+export HOMELAB_PRIMARY_DNS_DOMAIN="pickers.hl"
+export HOMELAB_SECONDARY_DNS_DOMAIN="sheila.hl"
+export HOMELAB_SHARED_DNS_DOMAIN="shared.homelab.internal"
+export HOMELAB_DNS_DOMAIN="homelab.internal"  # Base/fallback
+```
 
 ### Service Naming Convention
 
 #### Site-Specific Services
-Format: `<service>.<site>.homelab.internal`
+Format: `<service>.<site-domain>`
 
 Examples:
-- `argocd.site-a.homelab.internal` → 10.147.17.10:8080
-- `argocd.site-b.homelab.internal` → 10.147.17.20:8080
-- `grafana.site-a.homelab.internal` → 10.147.17.11:3000
-- `grafana.site-b.homelab.internal` → 10.147.17.21:3000
+- `argocd.pickers.hl` → 10.147.17.10:8080 (Primary site)
+- `argocd.sheila.hl` → 10.147.17.20:8080 (Secondary site)
+- `grafana.pickers.hl` → 10.147.17.11:3000
+- `grafana.sheila.hl` → 10.147.17.21:3000
 
 #### Shared Services
 Format: `<service>.shared.homelab.internal`
@@ -57,7 +75,7 @@ Examples:
 - `minio.shared.homelab.internal` → 10.147.17.102 (distributed endpoint)
 
 #### Proxy Shortcuts (Memorable URLs)
-Format: `<service>.homelab.internal` (no prefix)
+Format: `<service>.homelab.internal` (uses base domain)
 
 Examples:
 - `vault.homelab.internal` → Proxy → `vault.shared.homelab.internal`
@@ -67,24 +85,34 @@ Examples:
 ### DNS Record Structure
 
 ```
+# Primary site zone (pickers.hl)
+pickers.hl                          SOA, NS records
+├── argocd.pickers.hl               A record → 10.147.17.10
+├── grafana.pickers.hl              A record → 10.147.17.11
+├── traefik.pickers.hl              A record → 10.147.17.11
+└── *.pickers.hl                    Wildcard for k8s ingress
+
+# Secondary site zone (sheila.hl)
+sheila.hl                           SOA, NS records
+├── argocd.sheila.hl                A record → 10.147.17.20
+├── grafana.sheila.hl               A record → 10.147.17.21
+├── traefik.sheila.hl               A record → 10.147.17.21
+└── *.sheila.hl                     Wildcard for k8s ingress
+
+# Shared services zone (shared.homelab.internal)
+shared.homelab.internal             SOA, NS records
+├── vault.shared.homelab.internal   A record → 10.147.17.100
+├── registry.shared.homelab.internal A record → 10.147.17.101
+└── minio.shared.homelab.internal   A record → 10.147.17.102
+
+# Base zone for shortcuts (homelab.internal)
 homelab.internal                    SOA, NS records
-├── site-a.homelab.internal         Site A services
-│   ├── argocd                      A record → 10.147.17.10
-│   ├── grafana                     A record → 10.147.17.11
-│   └── traefik                     A record → 10.147.17.11
-├── site-b.homelab.internal         Site B services
-│   ├── argocd                      A record → 10.147.17.20
-│   ├── grafana                     A record → 10.147.17.21
-│   └── traefik                     A record → 10.147.17.21
-├── shared.homelab.internal         Shared services
-│   ├── vault                       A record → 10.147.17.100
-│   ├── registry                    A record → 10.147.17.101
-│   └── minio                       A record → 10.147.17.102
-└── *.homelab.internal              Proxy shortcuts
-    ├── vault                       CNAME → vault.shared
-    ├── argocd                      CNAME → argocd-proxy.shared
-    └── grafana                     CNAME → grafana.shared
+├── vault.homelab.internal          CNAME → vault.shared.homelab.internal
+├── argocd.homelab.internal         CNAME → argocd.pickers.hl (or load balanced)
+└── grafana.homelab.internal        CNAME → grafana.pickers.hl
 ```
+
+**Note**: Each site uses an independent DNS zone. This allows complete isolation and different domain strategies per site.
 
 ## Architecture Components
 
@@ -99,13 +127,15 @@ homelab.internal                    SOA, NS records
 ```yaml
 # Primary DNS (Site A)
 IP: 10.147.17.5
-Role: Primary authoritative for homelab.internal
+Role: Primary authoritative for pickers.hl, shared.homelab.internal, homelab.internal
+Zones: pickers.hl (primary site), shared.homelab.internal, homelab.internal
 Zone Transfer: Allow 10.147.17.25 (Site B secondary)
 
 # Secondary DNS (Site B)
 IP: 10.147.17.25
-Role: Secondary (reads from primary)
-Zone Transfer: From 10.147.17.5
+Role: Primary authoritative for sheila.hl; Secondary for shared zones
+Zones: sheila.hl (secondary site), shared.homelab.internal (replicated), homelab.internal (replicated)
+Zone Transfer: From 10.147.17.5 (for shared zones)
 ```
 
 **High Availability:**
@@ -142,8 +172,8 @@ spec:
         - --source=ingress
         - --provider=webhook
         - --webhook-provider-url=http://technitium-webhook:8888
-        - --domain-filter=site-a.homelab.internal
-        - --txt-owner-id=site-a
+        - --domain-filter=pickers.hl
+        - --txt-owner-id=primary
         - --policy=sync
         env:
         - name: TECHNITIUM_DNS_SERVER
@@ -155,13 +185,15 @@ spec:
               key: token
 ```
 
-Site B uses same config but with:
-- `--domain-filter=site-b.homelab.internal`
-- `--txt-owner-id=site-b`
+Secondary site uses same config but with:
+- `--domain-filter=sheila.hl`
+- `--txt-owner-id=secondary`
+- Points to secondary DNS: `10.147.17.25:5380`
 
 Shared services use:
 - `--domain-filter=shared.homelab.internal`
 - `--txt-owner-id=shared`
+- Points to primary DNS: `10.147.17.5:5380`
 
 ### 3. Service Proxy (k3s Built-in Traefik)
 
@@ -173,8 +205,8 @@ Shared services use:
 - Per-cluster deployment (not shared across sites)
 
 **Web Dashboard**: Built-in read-only dashboard for monitoring routes and services
-- Access: `http://traefik.site-a.homelab.internal/dashboard/` (Site A)
-- Access: `http://traefik.site-b.homelab.internal/dashboard/` (Site B)
+- Access: `http://traefik.pickers.hl/dashboard/` (Primary site)
+- Access: `http://traefik.sheila.hl/dashboard/` (Secondary site)
 - Features: Real-time topology, health checks, metrics
 - Authentication: Basic auth (configured via Middleware CRD)
 

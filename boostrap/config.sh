@@ -26,7 +26,19 @@ export HOMELAB_SECONDARY_SITE_LOCATION="${HOMELAB_SECONDARY_SITE_LOCATION:-Sheil
 export HOMELAB_BOOTSTRAP_SITE="${HOMELAB_BOOTSTRAP_SITE:-}"
 
 # DNS Configuration
+# Base domain (used for shared services and as fallback)
 export HOMELAB_DNS_DOMAIN="${HOMELAB_DNS_DOMAIN:-homelab.internal}"
+
+# Site-specific domains (independent domains per site)
+# These can be completely different domains or subdomains
+export HOMELAB_PRIMARY_DNS_DOMAIN="${HOMELAB_PRIMARY_DNS_DOMAIN:-pickers.hl}"
+export HOMELAB_SECONDARY_DNS_DOMAIN="${HOMELAB_SECONDARY_DNS_DOMAIN:-sheila.hl}"
+
+# Shared services domain (typically uses base domain)
+export HOMELAB_SHARED_DNS_DOMAIN="${HOMELAB_SHARED_DNS_DOMAIN:-shared.${HOMELAB_DNS_DOMAIN}}"
+
+# Legacy subdomain format (for backward compatibility)
+# These are computed from site IDs + base domain
 export HOMELAB_PRIMARY_DNS_SUBDOMAIN="${HOMELAB_PRIMARY_SITE_ID}.${HOMELAB_DNS_DOMAIN}"
 export HOMELAB_SECONDARY_DNS_SUBDOMAIN="${HOMELAB_SECONDARY_SITE_ID}.${HOMELAB_DNS_DOMAIN}"
 export HOMELAB_SHARED_DNS_SUBDOMAIN="shared.${HOMELAB_DNS_DOMAIN}"
@@ -136,16 +148,16 @@ get_service_dns() {
     
     case $scope in
         primary)
-            echo "${service}.${HOMELAB_PRIMARY_DNS_SUBDOMAIN}"
+            echo "${service}.${HOMELAB_PRIMARY_DNS_DOMAIN}"
             ;;
         secondary)
-            echo "${service}.${HOMELAB_SECONDARY_DNS_SUBDOMAIN}"
+            echo "${service}.${HOMELAB_SECONDARY_DNS_DOMAIN}"
             ;;
         shared)
-            echo "${service}.${HOMELAB_SHARED_DNS_SUBDOMAIN}"
+            echo "${service}.${HOMELAB_SHARED_DNS_DOMAIN}"
             ;;
         *)
-            # Shortcut (no subdomain)
+            # Shortcut (uses base domain)
             echo "${service}.${HOMELAB_DNS_DOMAIN}"
             ;;
     esac
@@ -166,9 +178,9 @@ show_config() {
     echo ""
     echo "DNS Domains:"
     echo "  Base:      ${HOMELAB_DNS_DOMAIN}"
-    echo "  Primary:   ${HOMELAB_PRIMARY_DNS_SUBDOMAIN}"
-    echo "  Secondary: ${HOMELAB_SECONDARY_DNS_SUBDOMAIN}"
-    echo "  Shared:    ${HOMELAB_SHARED_DNS_SUBDOMAIN}"
+    echo "  Primary:   ${HOMELAB_PRIMARY_DNS_DOMAIN}"
+    echo "  Secondary: ${HOMELAB_SECONDARY_DNS_DOMAIN}"
+    echo "  Shared:    ${HOMELAB_SHARED_DNS_DOMAIN}"
     echo ""
     echo "Repository: ${HOMELAB_REPO_URL}"
     echo "Install Dir: ${HOMELAB_INSTALL_DIR}"
