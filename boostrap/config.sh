@@ -113,6 +113,15 @@ export HOMELAB_WORKER_MEMORY="${HOMELAB_WORKER_MEMORY:-8192}"
 export HOMELAB_WORKER_DISK="${HOMELAB_WORKER_DISK:-64}"
 
 # Proxmox Configuration (if using Proxmox)
+# These can be physical IPs (for initial setup) or ZeroTier IPs (after ZT setup)
+export HOMELAB_PROXMOX_PRIMARY_HOST="${HOMELAB_PROXMOX_PRIMARY_HOST:-}"  # e.g. root@192.168.1.10 or root@10.147.17.2
+export HOMELAB_PROXMOX_SECONDARY_HOST="${HOMELAB_PROXMOX_SECONDARY_HOST:-}"  # e.g. root@192.168.2.10 or root@10.147.17.3
+
+# Proxmox node names (used in Terraform)
+export HOMELAB_PROXMOX_PRIMARY_NODE="${HOMELAB_PROXMOX_PRIMARY_NODE:-pve-primary}"
+export HOMELAB_PROXMOX_SECONDARY_NODE="${HOMELAB_PROXMOX_SECONDARY_NODE:-pve-secondary}"
+
+# Legacy single-node config (for backward compatibility)
 export HOMELAB_PROXMOX_NODE="${HOMELAB_PROXMOX_NODE:-pve}"
 export HOMELAB_PROXMOX_STORAGE="${HOMELAB_PROXMOX_STORAGE:-local-lvm}"
 export HOMELAB_PROXMOX_BRIDGE="${HOMELAB_PROXMOX_BRIDGE:-vmbr0}"
@@ -184,6 +193,11 @@ show_config() {
     echo ""
     echo "Repository: ${HOMELAB_REPO_URL}"
     echo "Install Dir: ${HOMELAB_INSTALL_DIR}"
+    echo ""
+    echo "Proxmox Hosts:"
+    echo "  Primary:   ${HOMELAB_PROXMOX_PRIMARY_HOST:-Not configured}"
+    echo "  Secondary: ${HOMELAB_PROXMOX_SECONDARY_HOST:-Not configured}"
+    echo ""
     echo "ZeroTier Network: ${HOMELAB_ZEROTIER_NETWORK_NAME}"
     echo "ZeroTier Subnet: ${HOMELAB_ZEROTIER_SUBNET}"
     echo "k3s Version: ${HOMELAB_K3S_VERSION}"

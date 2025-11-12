@@ -657,6 +657,87 @@ phase2_create_network() {
     fi
 }
 
+# Phase 2.5: Setup ZeroTier on Proxmox Hosts
+phase25_setup_proxmox_zerotier() {
+    echo ""
+    log_info "========================================"
+    log_info "PHASE 2.5: Setup Proxmox ZeroTier"
+    log_info "========================================"
+    
+    # Check if Proxmox hosts are configured
+    if [ -z "${HOMELAB_PROXMOX_PRIMARY_HOST:-}" ] && [ -z "${HOMELAB_PROXMOX_SECONDARY_HOST:-}" ]; then
+        log_warning "No Proxmox hosts configured, skipping ZeroTier setup"
+        log_warning "Set HOMELAB_PROXMOX_PRIMARY_HOST and HOMELAB_PROXMOX_SECONDARY_HOST to enable"
+        return 0
+    fi
+    
+    # Load network ID
+    if [ ! -f "$REPO_ROOT/.zerotier-network-id" ]; then
+        log_error "Network ID not found. Run phase 2 first."
+    fi
+    
+    ZEROTIER_NETWORK_ID=$(cat "$REPO_ROOT/.zerotier-network-id")
+    log_info "Network ID: $ZEROTIER_NETWORK_ID"
+    
+    # Setup script path
+    local setup_script="$REPO_ROOT/scripts/setup-proxmox-zerotier.sh"
+    
+    if [ ! -f "$setup_script" ]; then
+        log_error "Setup script not found: $setup_script"
+    fi
+    
+    # Setup primary Proxmox host
+    if [ -n "${HOMELAB_PROXMOX_PRIMARY_HOST:-}" ]; then
+        log_info "Setting up ZeroTier on primary Proxmox host: $HOMELAB_PROXMOX_PRIMARY_HOST"
+        
+        # Copy script to Proxmox host
+        scp -o StrictHostKeyChecking=no "$setup_script" "${HOMELAB_PROXMOX_PRIMARY_HOST}:/tmp/setup-zerotier.sh"
+        
+        # Run script on Proxmox host
+        ssh -o StrictHostKeyChecking=no "${HOMELAB_PROXMOX_PRIMARY_HOST}" \
+            "ZEROTIER_NETWORK_ID=$ZEROTIER_NETWORK_ID SITE_NAME=primary bash /tmp/setup-zerotier.sh"
+        
+        if [ $? -eq 0 ]; then
+            log_success "Primary Proxmox host configured"
+        else
+            log_warning "Primary Proxmox setup had issues, check logs"
+        fi
+    fi
+    
+    # Setup secondary Proxmox host
+    if [ -n "${HOMELAB_PROXMOX_SECONDARY_HOST:-}" ] && [ "$SINGLE_SITE" != "primary" ]; then
+        log_info "Setting up ZeroTier on secondary Proxmox host: $HOMELAB_PROXMOX_SECONDARY_HOST"
+        
+        # Copy script to Proxmox host
+        scp -o StrictHostKeyChecking=no "$setup_script" "${HOMELAB_PROXMOX_SECONDARY_HOST}:/tmp/setup-zerotier.sh"
+        
+        # Run script on Proxmox host
+        ssh -o StrictHostKeyChecking=no "${HOMELAB_PROXMOX_SECONDARY_HOST}" \
+            "ZEROTIER_NETWORK_ID=$ZEROTIER_NETWORK_ID SITE_NAME=secondary bash /tmp/setup-zerotier.sh"
+        
+        if [ $? -eq 0 ]; then
+            log_success "Secondary Proxmox host configured"
+        else
+            log_warning "Secondary Proxmox setup had issues, check logs"
+        fi
+    fi
+    
+    # Wait for nodes to be authorized
+    log_info "Waiting for Proxmox hosts to join network..."
+    sleep 5
+    
+    # Auto-authorize if enabled
+    if [ "${HOMELAB_ZT_AUTO_AUTHORIZE:-y}" = "y" ]; then
+        log_info "Auto-authorizing new members..."
+        authorize_all_members "$ZEROTIER_NETWORK_ID"
+    else
+        log_warning "Auto-authorization disabled"
+        log_warning "Manually authorize Proxmox hosts in ztnet UI"
+    fi
+    
+    log_success "Proxmox ZeroTier setup complete!"
+}
+
 # Phase 3: Provision Infrastructure with Terraform
 phase3_provision_infrastructure() {
     echo ""
@@ -764,10 +845,11 @@ main() {
             echo "  1) Complete bootstrap (all phases)"
             echo "  2) Phase 1 only (Deploy ztnet)"
             echo "  3) Phase 2 only (Create network)"
-            echo "  4) Phase 3 only (Provision infrastructure)"
-            echo "  5) Phase 4 only (Configure Kubernetes)"
-            echo "  6) Phases 3+4 (Provision & Configure)"
-            read -p "Enter choice [1-6]: " PHASE_CHOICE
+            echo "  4) Phase 2.5 only (Setup Proxmox ZeroTier)"
+            echo "  5) Phase 3 only (Provision infrastructure)"
+            echo "  6) Phase 4 only (Configure Kubernetes)"
+            echo "  7) Phases 3+4 (Provision & Configure)"
+            read -p "Enter choice [1-7]: " PHASE_CHOICE
         fi
     fi
     
@@ -775,6 +857,7 @@ main() {
         1)
             phase1_deploy_ztnet
             phase2_create_network
+            phase25_setup_proxmox_zerotier
             phase3_provision_infrastructure
             phase4_configure_kubernetes
             ;;
@@ -785,12 +868,15 @@ main() {
             phase2_create_network
             ;;
         4)
-            phase3_provision_infrastructure
+            phase25_setup_proxmox_zerotier
             ;;
         5)
-            phase4_configure_kubernetes
+            phase3_provision_infrastructure
             ;;
         6)
+            phase4_configure_kubernetes
+            ;;
+        7)
             phase3_provision_infrastructure
             phase4_configure_kubernetes
             ;;
