@@ -201,6 +201,12 @@ data:
             "url": "http://k8s-dashboard.pickers.hl",
             "description": "Kubernetes Cluster View",
             "icon": "kubernetes.png"
+          },
+          {
+            "name": "Home Assistant",
+            "url": "http://homeassistant.pickers.hl:8123",
+            "description": "Home Automation Platform",
+            "icon": "homeassistant.png"
           }
         ]
       },
@@ -230,6 +236,12 @@ data:
             "url": "http://k8s-dashboard.sheila.hl",
             "description": "Kubernetes Cluster View",
             "icon": "kubernetes.png"
+          },
+          {
+            "name": "Home Assistant",
+            "url": "http://homeassistant.sheila.hl:8123",
+            "description": "Home Automation Platform",
+            "icon": "homeassistant.png"
           }
         ]
       },

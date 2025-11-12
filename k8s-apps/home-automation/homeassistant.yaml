@@ -1,0 +1,247 @@
+---
+# Home Assistant - Home Automation Platform
+# Deployed to both sites for local control and redundancy
+# Each site has its own instance with site-specific configuration
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: home-automation
+---
+# Primary Site Home Assistant
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: homeassistant-config-primary
+  namespace: home-automation
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homeassistant-primary
+  namespace: home-automation
+  labels:
+    app: homeassistant
+    site: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: homeassistant
+      site: primary
+  template:
+    metadata:
+      labels:
+        app: homeassistant
+        site: primary
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: site
+                operator: In
+                values:
+                - primary
+      containers:
+      - name: homeassistant
+        image: ghcr.io/home-assistant/home-assistant:stable
+        ports:
+        - containerPort: 8123
+          name: http
+        env:
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8123
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8123
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: homeassistant-config-primary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: homeassistant-primary
+  namespace: home-automation
+  labels:
+    app: homeassistant
+    site: primary
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "homeassistant.pickers.hl,ha.pickers.hl"
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.147.17.120  # Home Assistant Primary VIP
+  ports:
+  - name: http
+    port: 8123
+    targetPort: 8123
+    protocol: TCP
+  selector:
+    app: homeassistant
+    site: primary
+---
+# IngressRoute for Primary Site
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: homeassistant-primary
+  namespace: home-automation
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`homeassistant.pickers.hl`) || Host(`ha.pickers.hl`)
+      kind: Rule
+      services:
+        - name: homeassistant-primary
+          port: 8123
+---
+# Secondary Site Home Assistant
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: homeassistant-config-secondary
+  namespace: home-automation
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homeassistant-secondary
+  namespace: home-automation
+  labels:
+    app: homeassistant
+    site: secondary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: homeassistant
+      site: secondary
+  template:
+    metadata:
+      labels:
+        app: homeassistant
+        site: secondary
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: site
+                operator: In
+                values:
+                - secondary
+      containers:
+      - name: homeassistant
+        image: ghcr.io/home-assistant/home-assistant:stable
+        ports:
+        - containerPort: 8123
+          name: http
+        env:
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8123
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8123
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: homeassistant-config-secondary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: homeassistant-secondary
+  namespace: home-automation
+  labels:
+    app: homeassistant
+    site: secondary
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "homeassistant.sheila.hl,ha.sheila.hl"
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.147.17.121  # Home Assistant Secondary VIP
+  ports:
+  - name: http
+    port: 8123
+    targetPort: 8123
+    protocol: TCP
+  selector:
+    app: homeassistant
+    site: secondary
+---
+# IngressRoute for Secondary Site
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: homeassistant-secondary
+  namespace: home-automation
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`homeassistant.sheila.hl`) || Host(`ha.sheila.hl`)
+      kind: Rule
+      services:
+        - name: homeassistant-secondary
+          port: 8123
