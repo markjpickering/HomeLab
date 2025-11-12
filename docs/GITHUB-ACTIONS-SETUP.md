@@ -61,14 +61,34 @@ GitHub Actions requires secrets for authentication and configuration. Add these 
 2. Click **Settings** → **Secrets and variables** → **Actions**
 3. Click **New repository secret**
 
-### Required Secrets for Bootstrap Workflow
+### Bootstrap Workflow Deployment Options
+
+You have two options for running the bootstrap workflow:
+
+**Option A: Remote Bootstrap (requires external IP)**
+- GitHub's servers SSH to your bootstrap host
+- Requires bootstrap host accessible from internet
+- Requires SSH secrets (see below)
+
+**Option B: Self-Hosted Runner (recommended for HomeLab)**
+- Runner installed on bootstrap host (or VM in your network)
+- No external IP needed
+- More secure (no SSH over internet)
+- Faster execution
+- See "Option B: Self-Hosted Runner Setup" section below
+
+### Required Secrets for Bootstrap Workflow (Option A Only)
+
+**Only needed if using remote SSH bootstrap (Option A):**
 
 | Secret Name | Description | Example Value | Where to Find |
 |-------------|-------------|---------------|---------------|
-| `BOOTSTRAP_HOST` | IP/hostname of bootstrap host | `10.0.1.5` or `bootstrap.homelab.local` | Your bootstrap host IP |
+| `BOOTSTRAP_HOST` | IP/hostname of bootstrap host | `123.45.67.89` or `homelab.duckdns.org` | Your public IP or Dynamic DNS |
 | `BOOTSTRAP_USER` | SSH user for bootstrap host | `root` | User on bootstrap host |
 | `BOOTSTRAP_SSH_KEY` | Private SSH key for authentication | `-----BEGIN OPENSSH PRIVATE KEY-----\n...` | Generate with `ssh-keygen` |
 | `ZEROTIER_NETWORK_ID` | ZeroTier network ID | `a1b2c3d4e5f6g7h8` | Created during Phase 2 or from ztnet UI |
+
+**Not needed if using self-hosted runner (Option B) - runner has direct access to local machine.**
 
 ### Required Secrets for Deploy Workflow
 
@@ -198,7 +218,207 @@ git push origin master
 
 ---
 
-## Step 3: Set Up Self-Hosted Runners (Optional)
+## Option B: Self-Hosted Runner Setup
+
+### How Self-Hosted Runners Work
+
+Instead of GitHub's servers running your workflow, **you run a GitHub Actions runner inside your own network**:
+
+```
+GitHub.com                Your Network
+┌─────────────┐          ┌──────────────────────────────┐
+│             │          │                              │
+│  Workflow   │──────────▶  Self-Hosted Runner         │
+│  Triggered  │  (https) │  ┌──────────────────────┐   │
+│             │          │  │ Polls GitHub for jobs│   │
+└─────────────┘          │  │ Runs workflow locally│   │
+                         │  │ Reports results back │   │
+                         │  └──────────────────────┘   │
+                         │           │                  │
+                         │           ▼                  │
+                         │  ┌──────────────────────┐   │
+                         │  │ Bootstrap Host       │   │
+                         │  │ (localhost access)   │   │
+                         │  └──────────────────────┘   │
+                         └──────────────────────────────┘
+```
+
+**How it works:**
+1. Runner software runs on a machine in your network (bootstrap host or any Linux VM)
+2. Runner polls GitHub.com every few seconds asking "any jobs for me?"
+3. When you trigger a workflow, GitHub says "yes, run this job"
+4. Runner downloads workflow code and runs it locally
+5. Runner has direct access to your bootstrap host (via localhost or local network)
+6. No inbound connections needed - runner initiates all communication
+7. Results sent back to GitHub
+
+**Benefits:**
+- ✅ No public IP needed
+- ✅ No SSH keys needed (runner is already on your network)
+- ✅ No port forwarding
+- ✅ More secure (no external access)
+- ✅ Faster (local execution)
+- ✅ Can access all local resources
+
+### Installing Self-Hosted Runner for Bootstrap
+
+You can install the runner on:
+- **Bootstrap host itself** (recommended)
+- **Any Linux VM in your network** that can reach bootstrap host
+- **A dedicated runner VM**
+
+#### Step 1: Get Runner Token
+
+1. Go to your GitHub repository
+2. **Settings** → **Actions** → **Runners**
+3. Click **New self-hosted runner**
+4. Select **Linux** and **x64**
+5. Copy the registration token (starts with `A...`)
+
+#### Step 2: Install Runner on Bootstrap Host
+
+SSH to your bootstrap host:
+
+```bash
+ssh root@<bootstrap-host-local-ip>
+
+# Create runner directory
+mkdir -p ~/github-runner && cd ~/github-runner
+
+# Download runner (check GitHub for latest version)
+curl -o actions-runner-linux-x64-2.311.0.tar.gz -L \
+  https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
+
+# Extract
+tar xzf ./actions-runner-linux-x64-2.311.0.tar.gz
+
+# Configure runner
+./config.sh --url https://github.com/markjpickering/HomeLab \
+  --token <YOUR_TOKEN_FROM_STEP_1> \
+  --labels bootstrap,self-hosted,linux \
+  --name bootstrap-runner \
+  --work _work
+
+# Install as systemd service (runs on boot)
+sudo ./svc.sh install
+sudo ./svc.sh start
+
+# Verify runner is running
+sudo ./svc.sh status
+```
+
+#### Step 3: Verify Runner Registration
+
+1. Go back to **Settings** → **Actions** → **Runners**
+2. You should see `bootstrap-runner` with status **Idle** (green)
+3. Labels should show: `bootstrap`, `self-hosted`, `linux`
+
+#### Step 4: Update Bootstrap Workflow
+
+Edit `.github/workflows/bootstrap.yml`:
+
+```yaml
+jobs:
+  bootstrap:
+    runs-on: [self-hosted, bootstrap]  # Changed from: ubuntu-latest
+    
+    steps:
+      # Remove SSH steps - not needed!
+      # - name: Setup SSH key  ← DELETE THIS
+      # - name: Copy repository ← DELETE THIS
+      
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run bootstrap script
+        env:
+          PHASE: ${{ github.event.inputs.phase }}
+          SITE: ${{ github.event.inputs.site }}
+        run: |
+          # Runner is already on bootstrap host!
+          cd $GITHUB_WORKSPACE
+          source boostrap/config.sh
+          
+          # Set site flag if not both
+          SITE_FLAG=""
+          if [ "${{ github.event.inputs.site }}" != "both" ]; then
+            SITE_FLAG="-s ${{ github.event.inputs.site }}"
+          fi
+          
+          # Run bootstrap with --execute flag
+          bash boostrap/linux/bootstrap-infrastructure.sh -e -p ${{ github.event.inputs.phase }} $SITE_FLAG
+```
+
+**Key changes:**
+- `runs-on: [self-hosted, bootstrap]` - tells GitHub to use your runner
+- No SSH setup needed
+- No rsync needed
+- Runner already has access to local filesystem
+- Much simpler!
+
+#### Step 5: Test Self-Hosted Runner
+
+1. Go to **Actions** tab
+2. Select **Bootstrap HomeLab Infrastructure**
+3. Click **Run workflow**
+4. Select Phase and Site
+5. Click **Run workflow**
+6. Watch it run on your local runner!
+
+### Self-Hosted Runner Management
+
+**Check runner status:**
+```bash
+sudo systemctl status actions.runner.*
+# or
+cd ~/github-runner && sudo ./svc.sh status
+```
+
+**View runner logs:**
+```bash
+journalctl -u actions.runner.* -f
+```
+
+**Restart runner:**
+```bash
+cd ~/github-runner && sudo ./svc.sh restart
+```
+
+**Stop runner:**
+```bash
+cd ~/github-runner && sudo ./svc.sh stop
+```
+
+**Unregister runner:**
+```bash
+cd ~/github-runner
+./config.sh remove --token <NEW_TOKEN>
+```
+
+### Security Considerations
+
+**Self-hosted runners are more secure for HomeLab because:**
+- ✅ No inbound connections from internet
+- ✅ Runner only makes outbound HTTPS to GitHub
+- ✅ No SSH keys exposed to GitHub
+- ✅ Full control over runner environment
+
+**Important security notes:**
+1. Runner has access to your GitHub secrets
+2. Anyone who can trigger workflows can run code on your runner
+3. Only use runners on repositories you control
+4. Don't expose runners to public/fork PRs
+
+**Secure your workflow:**
+```yaml
+on:
+  workflow_dispatch:  # Only manual triggers
+  # Don't use: pull_request_target or pull_request (from forks)
+```
+
+---
+
+## Step 3: Set Up Additional Self-Hosted Runners (Optional for Deploy Workflow)
 
 Self-hosted runners allow deployment directly to your k8s clusters. This is optional for the deploy workflow.
 

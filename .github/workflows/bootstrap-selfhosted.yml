@@ -1,0 +1,62 @@
+name: Bootstrap HomeLab Infrastructure (Self-Hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'Phase to run (1=all, 2=ztnet, 3=network, 4=proxmox-zt, 5=provision, 6=k8s, 7=provision+k8s)'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+          - '6'
+          - '7'
+      site:
+        description: 'Site to bootstrap (primary, secondary, or both)'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - primary
+          - secondary
+
+jobs:
+  bootstrap:
+    runs-on: [self-hosted, bootstrap]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run bootstrap script
+        env:
+          PHASE: ${{ github.event.inputs.phase }}
+          SITE: ${{ github.event.inputs.site }}
+        run: |
+          # Runner is already on bootstrap host - no SSH needed!
+          cd $GITHUB_WORKSPACE
+          source boostrap/config.sh
+          
+          # Set site flag if not both
+          SITE_FLAG=""
+          if [ "${{ github.event.inputs.site }}" != "both" ]; then
+            SITE_FLAG="-s ${{ github.event.inputs.site }}"
+          fi
+          
+          # Run bootstrap with --execute flag
+          bash boostrap/linux/bootstrap-infrastructure.sh -e -p ${{ github.event.inputs.phase }} $SITE_FLAG
+
+      - name: Upload bootstrap logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-logs
+          path: |
+            /tmp/bootstrap-*.log
+          retention-days: 30
