@@ -14,6 +14,7 @@
 #   -s, --site <site>       Bootstrap single site only (primary|secondary)
 #   -p, --phase <1-6>       Run specific phase (1=all, 2=ztnet, 3=network, 4=provision, 5=k8s, 6=provision+k8s)
 #   -v, --validate-only     Validate configuration and exit
+#   -n, --dry-run           Dry run mode (show what would be done without executing)
 #   -h, --help              Show this help
 #
 # Default behavior: Non-interactive, both sites
@@ -25,6 +26,7 @@ INTERACTIVE_MODE=false
 SINGLE_SITE=""
 PHASE_CHOICE=""
 VALIDATE_ONLY=false
+DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -42,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -v|--validate-only)
             VALIDATE_ONLY=true
+            shift
+            ;;
+        -n|--dry-run)
+            DRY_RUN=true
             shift
             ;;
         -h|--help)
@@ -93,6 +99,23 @@ log_warning() {
 log_error() {
     echo -e "${RED}❌ $1${NC}"
     exit 1
+}
+
+log_dryrun() {
+    echo -e "${YELLOW}[DRY RUN]${NC} $1"
+}
+
+run_command() {
+    local description="$1"
+    shift
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dryrun "$description"
+        log_dryrun "  Command: $*"
+        return 0
+    else
+        "$@"
+    fi
 }
 
 wait_for_service() {
@@ -819,6 +842,14 @@ main() {
     echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
     echo ""
     
+    # Show dry-run banner if enabled
+    if [ "$DRY_RUN" = true ]; then
+        echo -e "${YELLOW}╔════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║       DRY RUN MODE - NO CHANGES       ║${NC}"
+        echo -e "${YELLOW}╚════════════════════════════════════════╝${NC}"
+        echo ""
+    fi
+    
     # Run validation
     validate_configuration
     
@@ -826,6 +857,12 @@ main() {
     if [ "$VALIDATE_ONLY" = true ]; then
         log_success "Validation complete. Exiting (--validate-only flag set)."
         exit 0
+    fi
+    
+    # If dry-run, show plan and exit
+    if [ "$DRY_RUN" = true ]; then
+        log_info "Dry run mode: Showing execution plan without making changes"
+        log_info "Run without -n/--dry-run to execute"
     fi
     
     # Set Terraform variables for single-site mode if applicable

@@ -84,6 +84,16 @@ bash teardown-infrastructure.sh -k -s primary
 bash teardown-infrastructure.sh -k -s secondary
 ```
 
+### Dry Run (Preview Changes)
+```bash
+# See what would be destroyed without making changes
+bash teardown-infrastructure.sh -a -n
+# or
+bash teardown-infrastructure.sh --all --dry-run
+```
+
+Shows execution plan without making any changes. Safe to run anytime.
+
 ### Skip Confirmation Prompts
 ```bash
 bash teardown-infrastructure.sh -a -y
@@ -103,6 +113,7 @@ Options:
   -p, --proxmox-zt          Remove ZeroTier from Proxmox hosts only
   -s, --site <site>         Teardown single site only (primary|secondary)
   -d, --delete-data         Delete persistent data (volumes, databases, network ID)
+  -n, --dry-run             Show what would be done without executing
   -y, --yes                 Skip confirmation prompts
   -h, --help                Show help
 ```
@@ -129,8 +140,20 @@ Options:
 
 ## Common Workflows
 
+### Preview Before Teardown
+```bash
+# Always preview first with dry-run
+bash teardown-infrastructure.sh -a -n
+
+# Review output, then execute if satisfied
+bash teardown-infrastructure.sh -a
+```
+
 ### Test and Rebuild
 ```bash
+# Preview first
+bash teardown-infrastructure.sh -a -n
+
 # Destroy and test bootstrap again (preserves ztnet data)
 bash teardown-infrastructure.sh -a -y
 bash bootstrap-infrastructure.sh

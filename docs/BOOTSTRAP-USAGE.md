@@ -10,6 +10,9 @@ The `bootstrap-infrastructure.sh` script automates the deployment of your HomeLa
 # Validate configuration first (recommended)
 ./boostrap/linux/bootstrap-infrastructure.sh --validate-only
 
+# Preview what would be done (dry-run)
+./boostrap/linux/bootstrap-infrastructure.sh --dry-run
+
 # Bootstrap both sites (non-interactive)
 ./boostrap/linux/bootstrap-infrastructure.sh
 
@@ -37,6 +40,7 @@ The `bootstrap-infrastructure.sh` script automates the deployment of your HomeLa
 - `-s, --site <site>` - Bootstrap single site only (`primary` or `secondary`)
 - `-p, --phase <1-6>` - Run specific phase (see Phases section)
 - `-v, --validate-only` - Validate configuration and exit without running bootstrap
+- `-n, --dry-run` - Show what would be done without executing (preview mode)
 - `-h, --help` - Show help message
 
 ### Examples
@@ -44,6 +48,12 @@ The `bootstrap-infrastructure.sh` script automates the deployment of your HomeLa
 ```bash
 # Validate configuration before running
 ./boostrap/linux/bootstrap-infrastructure.sh -v
+
+# Preview what would be done (dry-run)
+./boostrap/linux/bootstrap-infrastructure.sh -n
+
+# Preview single site bootstrap
+./boostrap/linux/bootstrap-infrastructure.sh -n --site primary
 
 # Bootstrap primary site only
 ./boostrap/linux/bootstrap-infrastructure.sh --site primary

@@ -12,6 +12,7 @@
 #   -p, --proxmox-zt          Remove ZeroTier from Proxmox hosts only
 #   -s, --site <site>         Teardown single site only (primary|secondary)
 #   -d, --delete-data         Delete persistent data (volumes, databases, network ID)
+#   -n, --dry-run             Dry run mode (show what would be done without executing)
 #   -y, --yes                 Skip confirmation prompts
 #   -h, --help                Show this help
 #
@@ -24,6 +25,7 @@ TEARDOWN_MODE=""
 SINGLE_SITE=""
 SKIP_CONFIRMATION=false
 DELETE_DATA=false
+DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -49,6 +51,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -d|--delete-data)
             DELETE_DATA=true
+            shift
+            ;;
+        -n|--dry-run)
+            DRY_RUN=true
             shift
             ;;
         -y|--yes)
@@ -105,6 +111,23 @@ log_error() {
     exit 1
 }
 
+log_dryrun() {
+    echo -e "${YELLOW}[DRY RUN]${NC} $1"
+}
+
+run_command() {
+    local description="$1"
+    shift
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dryrun "$description"
+        log_dryrun "  Command: $*"
+        return 0
+    else
+        "$@"
+    fi
+}
+
 confirm() {
     if [ "$SKIP_CONFIRMATION" = true ]; then
         return 0
@@ -149,6 +172,12 @@ teardown_k8s() {
     if [ -n "$SINGLE_SITE" ]; then
         log_info "Destroying $SINGLE_SITE site only..."
         export TF_VAR_single_site="$SINGLE_SITE"
+    fi
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dryrun "Would destroy Terraform-managed infrastructure"
+        run_command "Run terraform destroy" terraform destroy -auto-approve
+        return
     fi
     
     if confirm "This will destroy all Terraform-managed infrastructure. Continue?" "n"; then
@@ -197,10 +226,15 @@ teardown_proxmox_zerotier() {
     for host in "${hosts[@]}"; do
         log_info "Removing ZeroTier from $host..."
         
-        if ssh "$host" "zerotier-cli leave $network_id" 2>/dev/null; then
-            log_success "ZeroTier removed from $host"
+        if [ "$DRY_RUN" = true ]; then
+            log_dryrun "Would remove ZeroTier from $host"
+            run_command "SSH to $host and leave network" ssh "$host" "zerotier-cli leave $network_id"
         else
-            log_warning "Failed to remove ZeroTier from $host (may not be installed)"
+            if ssh "$host" "zerotier-cli leave $network_id" 2>/dev/null; then
+                log_success "ZeroTier removed from $host"
+            else
+                log_warning "Failed to remove ZeroTier from $host (may not be installed)"
+            fi
         fi
     done
 }
@@ -217,6 +251,21 @@ teardown_ztnet() {
     
     if ! docker-compose ps 2>/dev/null | grep -q "Up"; then
         log_warning "ztnet controller not running"
+        return
+    fi
+    
+    if [ "$DRY_RUN" = true ]; then
+        if [ "$DELETE_DATA" = true ]; then
+            log_dryrun "Would destroy ztnet controller AND database"
+            run_command "Stop and remove ztnet with volumes" docker-compose down -v
+            if [ -f "$NETWORK_ID_FILE" ]; then
+                log_dryrun "Would remove network ID file: $NETWORK_ID_FILE"
+            fi
+        else
+            log_dryrun "Would stop ztnet controller (data preserved)"
+            run_command "Stop ztnet controller" docker-compose down
+            log_info "Volumes would be preserved: ztnet_postgres-data, ztnet_ztnet-data"
+        fi
         return
     fi
     
@@ -309,6 +358,14 @@ log_info "HomeLab Infrastructure Teardown"
 log_info "================================"
 echo ""
 
+# Show dry-run banner if enabled
+if [ "$DRY_RUN" = true ]; then
+    echo -e "${YELLOW}╔════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║       DRY RUN MODE - NO CHANGES       ║${NC}"
+    echo -e "${YELLOW}╚════════════════════════════════════════╝${NC}"
+    echo ""
+fi
+
 # If no mode specified, show interactive menu
 if [ -z "$TEARDOWN_MODE" ]; then
     show_interactive_menu
@@ -334,7 +391,12 @@ case $TEARDOWN_MODE in
 esac
 
 echo ""
-log_info "Teardown complete!"
+if [ "$DRY_RUN" = true ]; then
+    log_info "Dry run complete! No changes were made."
+    log_info "Run without -n/--dry-run to execute the teardown."
+else
+    log_info "Teardown complete!"
+fi
 log_info ""
 log_info "What was preserved:"
 log_info "  - Bootstrap host and tools"
