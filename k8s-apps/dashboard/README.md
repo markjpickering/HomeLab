@@ -17,6 +17,7 @@ Heimdall provides a beautiful, organized landing page for all your HomeLab servi
 The dashboard is accessible from multiple URLs:
 
 - `http://home.hl` - **Main shortcut** (shows all sites)
+- `http://jump.hl` - **Quick navigation** (alias for home.hl)
 - `http://dashboard.services.hl` - Shared access (all sites)
 - `http://dashboard.pickers.hl` - Primary site view
 - `http://dashboard.sheila.hl` - Secondary site view

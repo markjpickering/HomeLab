@@ -76,7 +76,7 @@ metadata:
   labels:
     app: heimdall
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: "dashboard.services.hl,home.hl"
+    external-dns.alpha.kubernetes.io/hostname: "dashboard.services.hl,home.hl,jump.hl"
 spec:
   type: LoadBalancer
   loadBalancerIP: 10.147.17.200  # Proxy VIP for dashboard
@@ -99,7 +99,7 @@ spec:
     - web
     - websecure
   routes:
-    - match: Host(`dashboard.pickers.hl`) || Host(`home.pickers.hl`) || Host(`hl`)
+    - match: Host(`dashboard.pickers.hl`) || Host(`home.pickers.hl`) || Host(`hl`) || Host(`jump.hl`)
       kind: Rule
       services:
         - name: heimdall
@@ -133,7 +133,7 @@ spec:
     - web
     - websecure
   routes:
-    - match: Host(`dashboard.services.hl`) || Host(`home.hl`)
+    - match: Host(`dashboard.services.hl`) || Host(`home.hl`) || Host(`jump.hl`)
       kind: Rule
       services:
         - name: heimdall
