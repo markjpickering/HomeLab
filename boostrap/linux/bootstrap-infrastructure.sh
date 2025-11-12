@@ -10,6 +10,7 @@
 #   bootstrap-infrastructure.sh [options]
 #
 # Options:
+#   -e, --execute           Execute the bootstrap (required to run)
 #   -i, --interactive       Interactive mode (prompt for confirmations)
 #   -s, --site <site>       Bootstrap single site only (primary|secondary)
 #   -p, --phase <1-6>       Run specific phase (1=all, 2=ztnet, 3=network, 4=provision, 5=k8s, 6=provision+k8s)
@@ -17,11 +18,12 @@
 #   -n, --dry-run           Dry run mode (show what would be done without executing)
 #   -h, --help              Show this help
 #
-# Default behavior: Non-interactive, both sites
+# Default behavior: Show help (must use -e/--execute to run)
 
 set -e
 
 # Parse arguments
+EXECUTE=false
 INTERACTIVE_MODE=false
 SINGLE_SITE=""
 PHASE_CHOICE=""
@@ -30,6 +32,10 @@ DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -e|--execute)
+            EXECUTE=true
+            shift
+            ;;
         -i|--interactive)
             INTERACTIVE_MODE=true
             shift
@@ -836,6 +842,18 @@ phase4_configure_kubernetes() {
 
 # Main execution
 main() {
+    # Show help by default if no execute/validate/dry-run flags
+    if [ "$EXECUTE" = false ] && [ "$VALIDATE_ONLY" = false ] && [ "$DRY_RUN" = false ]; then
+        head -n 20 "$0" | grep "#" | sed 's/^# //g'
+        echo ""
+        log_warning "No action specified. Use one of:"
+        echo "  -e, --execute        Execute the bootstrap"
+        echo "  -v, --validate-only  Validate configuration only"
+        echo "  -n, --dry-run        Preview without executing"
+        echo "  -h, --help           Show full help"
+        exit 0
+    fi
+    
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║  HomeLab Infrastructure Bootstrap     ║${NC}"

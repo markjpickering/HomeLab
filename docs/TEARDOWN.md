@@ -4,21 +4,30 @@ This guide explains how to reverse the effects of the bootstrap script using the
 
 ## Quick Start
 
-### Interactive Mode (Recommended)
+### Show Help (Default)
 ```bash
 cd ~/homelab/boostrap/linux
 bash teardown-infrastructure.sh
 ```
-The script will prompt you for what to destroy.
+Shows usage instructions and common commands.
 
-### Complete Teardown (Everything)
+### Preview First (Recommended)
 ```bash
-bash teardown-infrastructure.sh --all
+# Preview what would be destroyed
+bash teardown-infrastructure.sh -n -a
+```
+Always preview with dry-run before executing.
+
+### Execute Teardown
+```bash
+# Complete teardown (interactive, preserves data)
+bash teardown-infrastructure.sh -e -a
 ```
 **Note**: By default, persistent data (volumes, databases) is preserved.
 
 ```bash
-bash teardown-infrastructure.sh --all --delete-data --yes
+# Complete teardown including data (no prompts)
+bash teardown-infrastructure.sh -e -a -d -y
 ```
 **⚠️ WARNING**: This destroys all infrastructure AND data without prompting!
 
@@ -26,9 +35,9 @@ bash teardown-infrastructure.sh --all --delete-data --yes
 
 ### Teardown Everything
 ```bash
-bash teardown-infrastructure.sh -a
+bash teardown-infrastructure.sh -e -a
 # or
-bash teardown-infrastructure.sh --all
+bash teardown-infrastructure.sh --execute --all
 ```
 
 Destroys:
@@ -45,43 +54,43 @@ Add `-d/--delete-data` to also delete persistent data.
 
 ### Kubernetes Infrastructure Only
 ```bash
-bash teardown-infrastructure.sh -k
+bash teardown-infrastructure.sh -e -k
 # or
-bash teardown-infrastructure.sh --k8s-only
+bash teardown-infrastructure.sh --execute --k8s-only
 ```
 
 Destroys only Terraform-managed VMs, keeps ztnet controller running.
 
 ### Proxmox ZeroTier Only
 ```bash
-bash teardown-infrastructure.sh -p
+bash teardown-infrastructure.sh -e -p
 # or
-bash teardown-infrastructure.sh --proxmox-zt
+bash teardown-infrastructure.sh --execute --proxmox-zt
 ```
 
 Removes ZeroTier from Proxmox hosts (leaves the network).
 
 ### ztnet Controller Only
 ```bash
-bash teardown-infrastructure.sh -z
+bash teardown-infrastructure.sh -e -z
 # or
-bash teardown-infrastructure.sh --ztnet-only
+bash teardown-infrastructure.sh --execute --ztnet-only
 ```
 
 Stops ztnet controller (preserves database by default).
 
 To also delete the database:
 ```bash
-bash teardown-infrastructure.sh -z -d
+bash teardown-infrastructure.sh -e -z -d
 ```
 
 ### Single Site Teardown
 ```bash
 # Destroy primary site only
-bash teardown-infrastructure.sh -k -s primary
+bash teardown-infrastructure.sh -e -k -s primary
 
 # Destroy secondary site only
-bash teardown-infrastructure.sh -k -s secondary
+bash teardown-infrastructure.sh -e -k -s secondary
 ```
 
 ### Dry Run (Preview Changes)
@@ -107,6 +116,7 @@ bash teardown-infrastructure.sh --all --yes
 
 ```
 Options:
+  -e, --execute             Execute the teardown (required to run)
   -a, --all                 Complete teardown (everything)
   -k, --k8s-only            Destroy only Kubernetes infrastructure
   -z, --ztnet-only          Stop ztnet controller (preserves data by default)
@@ -117,6 +127,8 @@ Options:
   -y, --yes                 Skip confirmation prompts
   -h, --help                Show help
 ```
+
+**Default behavior:** Shows help if no flags provided. Must use `-e/--execute` or `-n/--dry-run` to proceed.
 
 ## What Gets Destroyed vs. Preserved
 
@@ -143,49 +155,49 @@ Options:
 ### Preview Before Teardown
 ```bash
 # Always preview first with dry-run
-bash teardown-infrastructure.sh -a -n
+bash teardown-infrastructure.sh -n -a
 
 # Review output, then execute if satisfied
-bash teardown-infrastructure.sh -a
+bash teardown-infrastructure.sh -e -a
 ```
 
 ### Test and Rebuild
 ```bash
 # Preview first
-bash teardown-infrastructure.sh -a -n
+bash teardown-infrastructure.sh -n -a
 
 # Destroy and test bootstrap again (preserves ztnet data)
-bash teardown-infrastructure.sh -a -y
-bash bootstrap-infrastructure.sh
+bash teardown-infrastructure.sh -e -a -y
+bash bootstrap-infrastructure.sh -e
 
 # Complete clean rebuild (delete everything including data)
-bash teardown-infrastructure.sh -a -d -y
-bash bootstrap-infrastructure.sh
+bash teardown-infrastructure.sh -e -a -d -y
+bash bootstrap-infrastructure.sh -e
 
 # Or just rebuild k8s cluster
-bash teardown-infrastructure.sh -k -y
-bash bootstrap-infrastructure.sh -p 5  # Phase 5: Provision infrastructure
+bash teardown-infrastructure.sh -e -k -y
+bash bootstrap-infrastructure.sh -e -p 5  # Phase 5: Provision infrastructure
 ```
 
 ### Move to Production
 ```bash
 # Destroy dev environment
-bash teardown-infrastructure.sh -a
+bash teardown-infrastructure.sh -e -a
 
 # Update config.sh for production settings
 vim ~/homelab/boostrap/config.sh
 
 # Bootstrap production
-bash bootstrap-infrastructure.sh
+bash bootstrap-infrastructure.sh -e
 ```
 
 ### Clean Up One Site
 ```bash
 # Remove secondary site
-bash teardown-infrastructure.sh -k -s secondary
+bash teardown-infrastructure.sh -e -k -s secondary
 
 # Later rebuild just secondary
-bash bootstrap-infrastructure.sh -s secondary
+bash bootstrap-infrastructure.sh -e -s secondary
 ```
 
 ## Safety Features

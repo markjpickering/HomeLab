@@ -6,6 +6,7 @@
 #   teardown-infrastructure.sh [options]
 #
 # Options:
+#   -e, --execute             Execute the teardown (required to run)
 #   -a, --all                 Complete teardown (everything)
 #   -k, --k8s-only            Destroy only Kubernetes infrastructure
 #   -z, --ztnet-only          Remove only ztnet controller
@@ -16,11 +17,12 @@
 #   -y, --yes                 Skip confirmation prompts
 #   -h, --help                Show this help
 #
-# Default: Interactive mode (prompts for what to destroy)
+# Default: Show help (must use -e/--execute to run)
 
 set -e
 
 # Parse arguments
+EXECUTE=false
 TEARDOWN_MODE=""
 SINGLE_SITE=""
 SKIP_CONFIRMATION=false
@@ -29,6 +31,10 @@ DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -e|--execute)
+            EXECUTE=true
+            shift
+            ;;
         -a|--all)
             TEARDOWN_MODE="all"
             shift
@@ -354,6 +360,23 @@ show_interactive_menu() {
 }
 
 # Main execution
+
+# Show help by default if no execute/dry-run flags
+if [ "$EXECUTE" = false ] && [ "$DRY_RUN" = false ]; then
+    head -n 20 "$0" | grep "#" | sed 's/^# //g'
+    echo ""
+    log_warning "No action specified. Use one of:"
+    echo "  -e, --execute        Execute the teardown"
+    echo "  -n, --dry-run        Preview without executing"
+    echo "  -h, --help           Show full help"
+    echo ""
+    echo "Common usage:"
+    echo "  bash teardown-infrastructure.sh -e -a      # Execute complete teardown"
+    echo "  bash teardown-infrastructure.sh -n -a      # Preview complete teardown"
+    echo "  bash teardown-infrastructure.sh -e -k      # Execute k8s teardown only"
+    exit 0
+fi
+
 log_info "HomeLab Infrastructure Teardown"
 log_info "================================"
 echo ""

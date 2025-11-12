@@ -64,8 +64,14 @@ jobs:
             # Load secrets from environment
             export HOMELAB_ZEROTIER_NETWORK_ID="${{ secrets.ZEROTIER_NETWORK_ID }}"
             
-            # Run bootstrap in non-interactive mode
-            bash boostrap/linux/bootstrap-infrastructure.sh -y -p ${{ github.event.inputs.phase }}
+            # Set site flag if not both
+            SITE_FLAG=""
+            if [ "${{ github.event.inputs.site }}" != "both" ]; then
+              SITE_FLAG="-s ${{ github.event.inputs.site }}"
+            fi
+            
+            # Run bootstrap with --execute flag (non-interactive mode)
+            bash boostrap/linux/bootstrap-infrastructure.sh -e -p ${{ github.event.inputs.phase }} $SITE_FLAG
           EOF
 
       - name: Upload bootstrap logs
