@@ -20,6 +20,11 @@ export HOMELAB_SECONDARY_SITE_ID="${HOMELAB_SECONDARY_SITE_ID:-secondary}"
 export HOMELAB_SECONDARY_SITE_NAME="${HOMELAB_SECONDARY_SITE_NAME:-Sheilas Home}"  # Human-readable name
 export HOMELAB_SECONDARY_SITE_LOCATION="${HOMELAB_SECONDARY_SITE_LOCATION:-Sheila's Home Lab}"  # Full description
 
+# Bootstrap Mode
+# Set to 'primary' or 'secondary' to bootstrap only one site, or leave empty for both sites
+# Can also be overridden with: --site primary or --site secondary
+export HOMELAB_BOOTSTRAP_SITE="${HOMELAB_BOOTSTRAP_SITE:-}"
+
 # DNS Configuration
 export HOMELAB_DNS_DOMAIN="${HOMELAB_DNS_DOMAIN:-homelab.internal}"
 export HOMELAB_PRIMARY_DNS_SUBDOMAIN="${HOMELAB_PRIMARY_SITE_ID}.${HOMELAB_DNS_DOMAIN}"

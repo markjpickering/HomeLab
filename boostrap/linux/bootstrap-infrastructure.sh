@@ -10,28 +10,42 @@
 #   bootstrap-infrastructure.sh [options]
 #
 # Options:
-#   -y, --yes              Non-interactive mode (use defaults/skip prompts)
-#   -p, --phase <1-6>      Run specific phase (1=all, 2=ztnet, 3=network, 4=provision, 5=k8s, 6=provision+k8s)
-#   -h, --help             Show this help
+#   -i, --interactive       Interactive mode (prompt for confirmations)
+#   -s, --site <site>       Bootstrap single site only (primary|secondary)
+#   -p, --phase <1-6>       Run specific phase (1=all, 2=ztnet, 3=network, 4=provision, 5=k8s, 6=provision+k8s)
+#   -v, --validate-only     Validate configuration and exit
+#   -h, --help              Show this help
+#
+# Default behavior: Non-interactive, both sites
 
 set -e
 
 # Parse arguments
-NON_INTERACTIVE=false
+INTERACTIVE_MODE=false
+SINGLE_SITE=""
 PHASE_CHOICE=""
+VALIDATE_ONLY=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -y|--yes)
-            NON_INTERACTIVE=true
+        -i|--interactive)
+            INTERACTIVE_MODE=true
             shift
+            ;;
+        -s|--site)
+            SINGLE_SITE="$2"
+            shift 2
             ;;
         -p|--phase)
             PHASE_CHOICE="$2"
             shift 2
             ;;
+        -v|--validate-only)
+            VALIDATE_ONLY=true
+            shift
+            ;;
         -h|--help)
-            head -n 15 "$0" | grep "#" | sed 's/^# //g'
+            head -n 20 "$0" | grep "#" | sed 's/^# //g'
             exit 0
             ;;
         *)
@@ -220,7 +234,7 @@ transfer_controller() {
 
     log_info "Preparing to transfer controller to $remote_host ($remote_dir)"
 
-    if [ "$NON_INTERACTIVE" = false ]; then
+    if [ "$INTERACTIVE_MODE" = true ]; then
         read -p "Proceed with controller transfer now? [y/N]: " -n 1 -r; echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             log_warning "Controller transfer skipped by user"
@@ -272,7 +286,193 @@ EOSSH
     log_success "Controller transferred to $remote_host"
 }
 
-# Check prerequisites
+# Comprehensive pre-flight validation
+validate_configuration() {
+    log_info "========================================"
+    log_info "Pre-Flight Configuration Validation"
+    log_info "========================================"
+    echo ""
+    
+    local errors=()
+    local warnings=()
+    
+    # 1. Check required environment variables
+    log_info "[1/8] Checking required configuration variables..."
+    
+    if [ -z "${HOMELAB_REPO_URL}" ] || [ "${HOMELAB_REPO_URL}" = "https://github.com/YOUR_USERNAME/HomeLab.git" ]; then
+        errors+=("HOMELAB_REPO_URL not configured in boostrap/config.sh")
+    fi
+    
+    if [ -z "${HOMELAB_DNS_DOMAIN}" ]; then
+        errors+=("HOMELAB_DNS_DOMAIN not set")
+    fi
+    
+    if [ -z "${HOMELAB_PRIMARY_SITE_ID}" ] || [ -z "${HOMELAB_SECONDARY_SITE_ID}" ]; then
+        errors+=("Site IDs not configured")
+    fi
+    
+    if [ -z "${HOMELAB_ZEROTIER_SUBNET}" ]; then
+        errors+=("HOMELAB_ZEROTIER_SUBNET not set")
+    fi
+    
+    # 2. Check tool prerequisites
+    log_info "[2/8] Checking required tools..."
+    
+    local missing_tools=()
+    command -v docker &> /dev/null || missing_tools+=("docker")
+    command -v docker-compose &> /dev/null || missing_tools+=("docker-compose")
+    command -v terraform &> /dev/null || missing_tools+=("terraform")
+    command -v ansible &> /dev/null || missing_tools+=("ansible")
+    command -v jq &> /dev/null || missing_tools+=("jq")
+    command -v sops &> /dev/null || missing_tools+=("sops")
+    command -v age &> /dev/null || missing_tools+=("age")
+    command -v curl &> /dev/null || missing_tools+=("curl")
+    command -v ssh &> /dev/null || missing_tools+=("ssh")
+    
+    if [ ${#missing_tools[@]} -ne 0 ]; then
+        errors+=("Missing required tools: ${missing_tools[*]}")
+    fi
+    
+    # 3. Validate single-site parameter
+    log_info "[3/8] Validating site configuration..."
+    
+    if [ -n "$SINGLE_SITE" ]; then
+        if [ "$SINGLE_SITE" != "primary" ] && [ "$SINGLE_SITE" != "secondary" ]; then
+            errors+=("Invalid --site value: '$SINGLE_SITE' (must be 'primary' or 'secondary')")
+        else
+            log_info "Single-site mode: $SINGLE_SITE"
+        fi
+    else
+        log_info "Multi-site mode: both sites will be configured"
+    fi
+    
+    # 4. Check directory structure
+    log_info "[4/8] Checking directory structure..."
+    
+    if [ ! -d "$ZTNET_DIR" ]; then
+        errors+=("ztnet directory not found: $ZTNET_DIR")
+    fi
+    
+    if [ ! -d "$TERRAFORM_DIR" ]; then
+        errors+=("Terraform directory not found: $TERRAFORM_DIR")
+    fi
+    
+    if [ ! -d "$ANSIBLE_DIR" ]; then
+        errors+=("Ansible directory not found: $ANSIBLE_DIR")
+    fi
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        warnings+=("Configuration file not found: $CONFIG_FILE")
+    fi
+    
+    # 5. Check Docker service
+    log_info "[5/8] Checking Docker service..."
+    
+    if ! docker ps &> /dev/null; then
+        errors+=("Docker daemon not running or insufficient permissions")
+    fi
+    
+    # 6. Validate IP ranges
+    log_info "[6/8] Validating IP address configuration..."
+    
+    # Check for IP conflicts
+    local ips=(
+        "$HOMELAB_PRIMARY_SERVER_IP"
+        "$HOMELAB_PRIMARY_AGENT1_IP"
+        "$HOMELAB_PRIMARY_AGENT2_IP"
+        "$HOMELAB_SECONDARY_SERVER_IP"
+        "$HOMELAB_SECONDARY_AGENT1_IP"
+        "$HOMELAB_SECONDARY_AGENT2_IP"
+        "$HOMELAB_PRIMARY_DNS_IP"
+        "$HOMELAB_SECONDARY_DNS_IP"
+        "$HOMELAB_VAULT_VIP"
+        "$HOMELAB_REGISTRY_VIP"
+        "$HOMELAB_MINIO_VIP"
+        "$HOMELAB_PROXY_VIP"
+    )
+    
+    local unique_ips=$(printf '%s\n' "${ips[@]}" | sort -u | wc -l)
+    if [ ${#ips[@]} -ne $unique_ips ]; then
+        errors+=("Duplicate IP addresses detected in configuration")
+    fi
+    
+    # Validate IPs are in subnet
+    local subnet_base=$(echo "$HOMELAB_ZEROTIER_SUBNET" | cut -d'/' -f1 | cut -d'.' -f1-3)
+    for ip in "${ips[@]}"; do
+        if [ -n "$ip" ]; then
+            local ip_base=$(echo "$ip" | cut -d'.' -f1-3)
+            if [ "$ip_base" != "$subnet_base" ]; then
+                warnings+=("IP $ip may be outside configured subnet $HOMELAB_ZEROTIER_SUBNET")
+            fi
+        fi
+    done
+    
+    # 7. Check SOPS/Age setup
+    log_info "[7/8] Checking SOPS/Age configuration..."
+    
+    local age_key_file="${HOMELAB_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
+    if [ ! -f "$age_key_file" ]; then
+        warnings+=("Age key not found at $age_key_file (will be generated if needed)")
+    fi
+    
+    if [ ! -f "$REPO_ROOT/.sops.yaml" ]; then
+        warnings+=(".sops.yaml not found in repository root")
+    fi
+    
+    # 8. Check Terraform secrets
+    log_info "[8/8] Checking Terraform secrets..."
+    
+    local secrets_file="$TERRAFORM_DIR/${HOMELAB_TF_SECRETS_FILE:-secrets.enc.yaml}"
+    if [ ! -f "$secrets_file" ]; then
+        warnings+=("Terraform secrets file not found: $secrets_file")
+    elif ! grep -q "sops:" "$secrets_file" || ! grep -q "age:" "$secrets_file"; then
+        errors+=("Terraform secrets file exists but is not encrypted with SOPS")
+    fi
+    
+    # Report results
+    echo ""
+    log_info "========================================"
+    log_info "Validation Results"
+    log_info "========================================"
+    echo ""
+    
+    if [ ${#warnings[@]} -gt 0 ]; then
+        log_warning "Found ${#warnings[@]} warning(s):"
+        for warning in "${warnings[@]}"; do
+            echo -e "  ${YELLOW}⚠️  $warning${NC}"
+        done
+        echo ""
+    fi
+    
+    if [ ${#errors[@]} -gt 0 ]; then
+        log_error "Found ${#errors[@]} error(s):"
+        for error in "${errors[@]}"; do
+            echo -e "  ${RED}❌ $error${NC}"
+        done
+        echo ""
+        log_error "Please fix the above errors before proceeding."
+    fi
+    
+    log_success "✅ Configuration validation passed!"
+    echo ""
+    
+    # Display summary
+    if [ -n "$SINGLE_SITE" ]; then
+        log_info "Bootstrap mode: Single site ($SINGLE_SITE)"
+    else
+        log_info "Bootstrap mode: Multi-site (primary + secondary)"
+    fi
+    
+    if [ "$INTERACTIVE_MODE" = true ]; then
+        log_info "Interaction mode: Interactive (prompts enabled)"
+    else
+        log_info "Interaction mode: Non-interactive (automated)"
+    fi
+    
+    echo ""
+}
+
+# Check prerequisites (legacy, kept for backward compatibility)
 check_prerequisites() {
     log_info "Checking prerequisites..."
     
@@ -330,7 +530,7 @@ check_terraform_secrets() {
         log_warning "Encrypted secrets file not found: $secrets_file"
         
         if [ -f "$example_file" ]; then
-            if [ "$NON_INTERACTIVE" = false ]; then
+            if [ "$INTERACTIVE_MODE" = true ]; then
                 log_info "Example file exists. You need to:"
                 echo "  1. Copy the example: cp $example_file $secrets_file"
                 echo "  2. Edit with your values: sops $secrets_file"
@@ -347,7 +547,7 @@ check_terraform_secrets() {
             if [[ $CREATE_NOW =~ ^[Yy]$ ]]; then
                 cp "$example_file" "$secrets_file"
                 
-                if [ "$NON_INTERACTIVE" = false ]; then
+                if [ "$INTERACTIVE_MODE" = true ]; then
                     log_info "Opening secrets file in SOPS editor..."
                     sops "$secrets_file"
                     log_success "Secrets file created and encrypted"
@@ -401,7 +601,7 @@ EOF
     
     log_success "ztnet controller is running at http://localhost:3000"
     
-    if [ "$NON_INTERACTIVE" = false ]; then
+    if [ "$INTERACTIVE_MODE" = true ]; then
         log_warning "IMPORTANT: Access http://localhost:3000 and create your admin account NOW"
         echo ""
         read -p "Press Enter after you've created your admin account..."
@@ -440,7 +640,7 @@ phase2_create_network() {
     log_success "Network ID saved: $ZEROTIER_NETWORK_ID"
     
     # Join bootstrap host to network based on preference
-    if [ "$NON_INTERACTIVE" = false ]; then
+    if [ "$INTERACTIVE_MODE" = true ]; then
         log_info "Join this bootstrap host to the ZeroTier network?"
         read -p "[y/N]: " -n 1 -r; echo
         JOIN_NETWORK=$REPLY
@@ -482,22 +682,20 @@ phase3_provision_infrastructure() {
     terraform init
     
     log_info "Planning infrastructure..."
-    if [ "$NON_INTERACTIVE" = true ]; then
-        terraform plan -out=tfplan
-        log_info "Applying Terraform configuration (non-interactive mode)..."
-        terraform apply -auto-approve tfplan
-    else
-        terraform plan -out=tfplan
-        
+    terraform plan -out=tfplan
+    
+    if [ "$INTERACTIVE_MODE" = true ]; then
         log_warning "Review the plan above. Ready to apply?"
         read -p "Continue? [y/N]: " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             log_error "Terraform apply cancelled by user"
         fi
-        
         log_info "Applying Terraform configuration..."
         terraform apply tfplan
+    else
+        log_info "Applying Terraform configuration (non-interactive mode)..."
+        terraform apply -auto-approve tfplan
     fi
     
     log_success "Infrastructure provisioned!"
@@ -540,11 +738,24 @@ main() {
     echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
     echo ""
     
-    check_prerequisites
+    # Run validation
+    validate_configuration
+    
+    # If validate-only flag is set, exit here
+    if [ "$VALIDATE_ONLY" = true ]; then
+        log_success "Validation complete. Exiting (--validate-only flag set)."
+        exit 0
+    fi
+    
+    # Set Terraform variables for single-site mode if applicable
+    if [ -n "$SINGLE_SITE" ]; then
+        export TF_VAR_single_site="$SINGLE_SITE"
+        log_info "Single-site deployment: Only $SINGLE_SITE will be configured"
+    fi
     
     # Ask which phases to run (if not provided as argument)
     if [ -z "$PHASE_CHOICE" ]; then
-        if [ "$NON_INTERACTIVE" = true ]; then
+        if [ "$INTERACTIVE_MODE" = false ]; then
             log_info "Non-interactive mode: Running complete bootstrap (all phases)"
             PHASE_CHOICE="1"
         else
