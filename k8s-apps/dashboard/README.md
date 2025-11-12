@@ -16,11 +16,18 @@ Heimdall provides a beautiful, organized landing page for all your HomeLab servi
 
 The dashboard is accessible from multiple URLs:
 
-- `http://home.hl` - Main shortcut
-- `http://dashboard.services.hl` - Shared access
-- `http://dashboard.pickers.hl` - Primary site
-- `http://dashboard.sheila.hl` - Secondary site
+- `http://home.hl` - **Main shortcut** (shows all sites)
+- `http://dashboard.services.hl` - Shared access (all sites)
+- `http://dashboard.pickers.hl` - Primary site view
+- `http://dashboard.sheila.hl` - Secondary site view
 - `http://hl` - Ultra-short access
+
+**Site Navigation:**
+The dashboard is deployed as a **shared service** accessible from both sites. It includes:
+- Navigation tiles at the top for jumping between sites
+- All services from both primary and secondary sites
+- Shared infrastructure services
+- Quick access links to each cluster
 
 ## Deployment
 
@@ -78,15 +85,28 @@ Heimdall can pull stats from many popular applications automatically:
 
 The deployment includes these services organized by category:
 
+### Site Navigation (Top Section)
+- **Pickering's Home** - Jump to primary site dashboard
+- **Sheila's Home** - Jump to secondary site dashboard
+- **All Services** - View unified dashboard with everything
+
+### Quick Access Links
+- **This Dashboard** - Return to main dashboard home
+- **Primary Cluster** - Direct access to `pickers.hl`
+- **Secondary Cluster** - Direct access to `sheila.hl`
+- **Shared Infrastructure** - Direct access to `services.hl`
+
 ### Pickering's Home (Primary Site)
 - ArgoCD - GitOps deployment
 - Grafana - Metrics & monitoring
 - Traefik - Ingress controller dashboard
+- Kubernetes Dashboard - Cluster management
 
 ### Sheila's Home (Secondary Site)
 - ArgoCD - GitOps deployment
 - Grafana - Metrics & monitoring
 - Traefik - Ingress controller dashboard
+- Kubernetes Dashboard - Cluster management
 
 ### Shared Services
 - Vault - Secrets management

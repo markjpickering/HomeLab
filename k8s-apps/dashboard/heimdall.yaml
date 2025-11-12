@@ -149,6 +149,32 @@ metadata:
 data:
   apps.json: |
     {
+      "site_navigation": {
+        "name": "Site Navigation",
+        "apps": [
+          {
+            "name": "Pickering's Home",
+            "url": "http://dashboard.pickers.hl",
+            "description": "Jump to Primary Site Dashboard",
+            "icon": "home.png",
+            "color": "#3498db"
+          },
+          {
+            "name": "Sheila's Home",
+            "url": "http://dashboard.sheila.hl",
+            "description": "Jump to Secondary Site Dashboard",
+            "icon": "home.png",
+            "color": "#9b59b6"
+          },
+          {
+            "name": "All Services",
+            "url": "http://dashboard.services.hl",
+            "description": "View All Sites & Services",
+            "icon": "dashboard.png",
+            "color": "#2ecc71"
+          }
+        ]
+      },
       "primary_site": {
         "name": "Pickering's Home",
         "apps": [
@@ -169,6 +195,12 @@ data:
             "url": "http://traefik.pickers.hl/dashboard/",
             "description": "Ingress Controller Dashboard",
             "icon": "traefik.png"
+          },
+          {
+            "name": "Kubernetes Dashboard",
+            "url": "http://k8s-dashboard.pickers.hl",
+            "description": "Kubernetes Cluster View",
+            "icon": "kubernetes.png"
           }
         ]
       },
@@ -192,6 +224,45 @@ data:
             "url": "http://traefik.sheila.hl/dashboard/",
             "description": "Ingress Controller Dashboard",
             "icon": "traefik.png"
+          },
+          {
+            "name": "Kubernetes Dashboard",
+            "url": "http://k8s-dashboard.sheila.hl",
+            "description": "Kubernetes Cluster View",
+            "icon": "kubernetes.png"
+          }
+        ]
+      },
+      "quick_links": {
+        "name": "Quick Access",
+        "apps": [
+          {
+            "name": "This Dashboard",
+            "url": "http://home.hl",
+            "description": "Main Dashboard Home",
+            "icon": "dashboard.png",
+            "color": "#e74c3c"
+          },
+          {
+            "name": "Primary Cluster",
+            "url": "http://pickers.hl",
+            "description": "Services at Pickering's",
+            "icon": "server.png",
+            "color": "#3498db"
+          },
+          {
+            "name": "Secondary Cluster",
+            "url": "http://sheila.hl",
+            "description": "Services at Sheila's",
+            "icon": "server.png",
+            "color": "#9b59b6"
+          },
+          {
+            "name": "Shared Infrastructure",
+            "url": "http://services.hl",
+            "description": "Cross-site Services",
+            "icon": "network.png",
+            "color": "#2ecc71"
           }
         ]
       },
