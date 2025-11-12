@@ -27,15 +27,15 @@ export HOMELAB_BOOTSTRAP_SITE="${HOMELAB_BOOTSTRAP_SITE:-}"
 
 # DNS Configuration
 # Base domain (used for shared services and as fallback)
-export HOMELAB_DNS_DOMAIN="${HOMELAB_DNS_DOMAIN:-hl.internal}"
+export HOMELAB_DNS_DOMAIN="${HOMELAB_DNS_DOMAIN:-hl}"
 
-# Site-specific domains (consistent .hl.internal pattern)
-# Each site gets a subdomain of the base hl.internal domain
-export HOMELAB_PRIMARY_DNS_DOMAIN="${HOMELAB_PRIMARY_DNS_DOMAIN:-pickers.hl.internal}"
-export HOMELAB_SECONDARY_DNS_DOMAIN="${HOMELAB_SECONDARY_DNS_DOMAIN:-sheila.hl.internal}"
+# Site-specific domains (consistent .hl pattern)
+# Each site gets a subdomain of the base .hl domain
+export HOMELAB_PRIMARY_DNS_DOMAIN="${HOMELAB_PRIMARY_DNS_DOMAIN:-pickers.hl}"
+export HOMELAB_SECONDARY_DNS_DOMAIN="${HOMELAB_SECONDARY_DNS_DOMAIN:-sheila.hl}"
 
 # Shared services domain
-export HOMELAB_SHARED_DNS_DOMAIN="${HOMELAB_SHARED_DNS_DOMAIN:-services.hl.internal}"
+export HOMELAB_SHARED_DNS_DOMAIN="${HOMELAB_SHARED_DNS_DOMAIN:-services.hl}"
 
 # Legacy subdomain format (for backward compatibility)
 # These are computed from site IDs + base domain
