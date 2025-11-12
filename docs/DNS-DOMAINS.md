@@ -12,13 +12,13 @@ Each site has its own domain that can be completely independent:
 
 **Primary Site Domain:**
 - Variable: `HOMELAB_PRIMARY_DNS_DOMAIN`
-- Default: `pickers.hl`
-- Services: `service.pickers.hl`
+- Default: `pickers.hl.internal`
+- Services: `service.pickers.hl.internal`
 
 **Secondary Site Domain:**
 - Variable: `HOMELAB_SECONDARY_DNS_DOMAIN`
-- Default: `sheila.hl`
-- Services: `service.sheila.hl`
+- Default: `sheila.hl.internal`
+- Services: `service.sheila.hl.internal`
 
 ### 2. Shared Services Domain
 
@@ -26,8 +26,8 @@ Shared services accessible from both sites:
 
 **Shared Domain:**
 - Variable: `HOMELAB_SHARED_DNS_DOMAIN`
-- Default: `shared.homelab.internal`
-- Services: `service.shared.homelab.internal`
+- Default: `services.hl.internal`
+- Services: `service.services.hl.internal`
 
 ### 3. Base Domain
 
@@ -35,8 +35,8 @@ Used for proxy shortcuts and shared resources:
 
 **Base Domain:**
 - Variable: `HOMELAB_DNS_DOMAIN`
-- Default: `homelab.internal`
-- Services: `service.homelab.internal` (shortcuts/proxies)
+- Default: `hl.internal`
+- Services: `service.hl.internal` (shortcuts/proxies)
 
 ## Configuration
 
@@ -45,25 +45,25 @@ Used for proxy shortcuts and shared resources:
 Edit `boostrap/config.sh`:
 
 ```bash
-# Site-specific domains (independent domains per site)
-export HOMELAB_PRIMARY_DNS_DOMAIN="${HOMELAB_PRIMARY_DNS_DOMAIN:-pickers.hl}"
-export HOMELAB_SECONDARY_DNS_DOMAIN="${HOMELAB_SECONDARY_DNS_DOMAIN:-sheila.hl}"
+# Site-specific domains (consistent .hl.internal pattern)
+export HOMELAB_PRIMARY_DNS_DOMAIN="${HOMELAB_PRIMARY_DNS_DOMAIN:-pickers.hl.internal}"
+export HOMELAB_SECONDARY_DNS_DOMAIN="${HOMELAB_SECONDARY_DNS_DOMAIN:-sheila.hl.internal}"
 
 # Shared services domain
-export HOMELAB_SHARED_DNS_DOMAIN="${HOMELAB_SHARED_DNS_DOMAIN:-shared.homelab.internal}"
+export HOMELAB_SHARED_DNS_DOMAIN="${HOMELAB_SHARED_DNS_DOMAIN:-services.hl.internal}"
 
 # Base domain (for shortcuts)
-export HOMELAB_DNS_DOMAIN="${HOMELAB_DNS_DOMAIN:-homelab.internal}"
+export HOMELAB_DNS_DOMAIN="${HOMELAB_DNS_DOMAIN:-hl.internal}"
 ```
 
 ### Example Configurations
 
-#### Separate TLDs per Site
+#### Consistent .hl.internal Pattern (Default)
 ```bash
-export HOMELAB_PRIMARY_DNS_DOMAIN="pickers.hl"
-export HOMELAB_SECONDARY_DNS_DOMAIN="sheila.hl"
-export HOMELAB_SHARED_DNS_DOMAIN="shared.homelab.internal"
-export HOMELAB_DNS_DOMAIN="homelab.internal"
+export HOMELAB_PRIMARY_DNS_DOMAIN="pickers.hl.internal"
+export HOMELAB_SECONDARY_DNS_DOMAIN="sheila.hl.internal"
+export HOMELAB_SHARED_DNS_DOMAIN="services.hl.internal"
+export HOMELAB_DNS_DOMAIN="hl.internal"
 ```
 
 #### Subdomain-Based (Traditional)
@@ -84,41 +84,41 @@ export HOMELAB_DNS_DOMAIN="homelab.internal"
 
 ## DNS Zone Structure
 
-With the default configuration (`pickers.hl` / `sheila.hl`):
+With the default configuration (`pickers.hl.internal` / `sheila.hl.internal`):
 
-### Primary Site Zone (pickers.hl)
+### Primary Site Zone (pickers.hl.internal)
 ```
-pickers.hl                    SOA, NS records
-├── argocd.pickers.hl        A → 10.147.17.10
-├── grafana.pickers.hl       A → 10.147.17.11
-├── vault.pickers.hl         A → 10.147.17.12
-└── *.pickers.hl             Wildcard for k8s ingress
-```
-
-### Secondary Site Zone (sheila.hl)
-```
-sheila.hl                     SOA, NS records
-├── argocd.sheila.hl         A → 10.147.17.20
-├── grafana.sheila.hl        A → 10.147.17.21
-├── vault.sheila.hl          A → 10.147.17.22
-└── *.sheila.hl              Wildcard for k8s ingress
+pickers.hl.internal                SOA, NS records
+├── argocd.pickers.hl.internal    A → 10.147.17.10
+├── grafana.pickers.hl.internal   A → 10.147.17.11
+├── vault.pickers.hl.internal     A → 10.147.17.12
+└── *.pickers.hl.internal         Wildcard for k8s ingress
 ```
 
-### Shared Zone (shared.homelab.internal)
+### Secondary Site Zone (sheila.hl.internal)
 ```
-shared.homelab.internal                   SOA, NS records
-├── vault.shared.homelab.internal        A → 10.147.17.100 (VIP)
-├── registry.shared.homelab.internal     A → 10.147.17.101 (VIP)
-├── minio.shared.homelab.internal        A → 10.147.17.102 (VIP)
-└── auth.shared.homelab.internal         A → 10.147.17.110 (Authentik)
+sheila.hl.internal                 SOA, NS records
+├── argocd.sheila.hl.internal     A → 10.147.17.20
+├── grafana.sheila.hl.internal    A → 10.147.17.21
+├── vault.sheila.hl.internal      A → 10.147.17.22
+└── *.sheila.hl.internal          Wildcard for k8s ingress
 ```
 
-### Base Zone (homelab.internal)
+### Shared Zone (services.hl.internal)
 ```
-homelab.internal                          SOA, NS records
-├── vault.homelab.internal               CNAME → vault.shared.homelab.internal
-├── argocd.homelab.internal              CNAME → argocd.pickers.hl
-└── grafana.homelab.internal             CNAME → grafana.pickers.hl
+services.hl.internal                     SOA, NS records
+├── vault.services.hl.internal          A → 10.147.17.100 (VIP)
+├── registry.services.hl.internal       A → 10.147.17.101 (VIP)
+├── minio.services.hl.internal          A → 10.147.17.102 (VIP)
+└── auth.services.hl.internal           A → 10.147.17.110 (Authentik)
+```
+
+### Base Zone (hl.internal)
+```
+hl.internal                            SOA, NS records
+├── vault.hl.internal                 CNAME → vault.services.hl.internal
+├── argocd.hl.internal                CNAME → argocd.pickers.hl.internal
+└── grafana.hl.internal               CNAME → grafana.pickers.hl.internal
 ```
 
 ## Service Access Examples
@@ -126,51 +126,51 @@ homelab.internal                          SOA, NS records
 ### Accessing Site-Specific Services
 
 **Primary Site:**
-- ArgoCD: `https://argocd.pickers.hl`
-- Grafana: `https://grafana.pickers.hl`
-- Traefik Dashboard: `https://traefik.pickers.hl/dashboard/`
+- ArgoCD: `https://argocd.pickers.hl.internal`
+- Grafana: `https://grafana.pickers.hl.internal`
+- Traefik Dashboard: `https://traefik.pickers.hl.internal/dashboard/`
 
 **Secondary Site:**
-- ArgoCD: `https://argocd.sheila.hl`
-- Grafana: `https://grafana.sheila.hl`
-- Traefik Dashboard: `https://traefik.sheila.hl/dashboard/`
+- ArgoCD: `https://argocd.sheila.hl.internal`
+- Grafana: `https://grafana.sheila.hl.internal`
+- Traefik Dashboard: `https://traefik.sheila.hl.internal/dashboard/`
 
 ### Accessing Shared Services
 
 Direct access via shared domain:
-- Vault: `https://vault.shared.homelab.internal`
-- Registry: `https://registry.shared.homelab.internal`
-- MinIO: `https://minio.shared.homelab.internal`
-- Authentik: `https://auth.shared.homelab.internal`
+- Vault: `https://vault.services.hl.internal`
+- Registry: `https://registry.services.hl.internal`
+- MinIO: `https://minio.services.hl.internal`
+- Authentik: `https://auth.services.hl.internal`
 
 ### Accessing via Shortcuts
 
 Convenient shortcuts using base domain:
-- Vault: `https://vault.homelab.internal` → routes to `vault.shared.homelab.internal`
-- ArgoCD: `https://argocd.homelab.internal` → routes to active site
-- Grafana: `https://grafana.homelab.internal` → routes to unified dashboard
+- Vault: `https://vault.hl.internal` → routes to `vault.services.hl.internal`
+- ArgoCD: `https://argocd.hl.internal` → routes to active site
+- Grafana: `https://grafana.hl.internal` → routes to unified dashboard
 
 ## DNS Server Configuration
 
 ### Primary DNS Server (10.147.17.5)
 
 **Authoritative Zones:**
-- `pickers.hl` - Primary site zone (authoritative)
-- `shared.homelab.internal` - Shared services (authoritative)
-- `homelab.internal` - Base domain with shortcuts (authoritative)
+- `pickers.hl.internal` - Primary site zone (authoritative)
+- `services.hl.internal` - Shared services (authoritative)
+- `hl.internal` - Base domain with shortcuts (authoritative)
 
 **Zone Transfers:**
 - Allows transfers to secondary DNS (10.147.17.25)
-- Transfers: `shared.homelab.internal`, `homelab.internal`
+- Transfers: `services.hl.internal`, `hl.internal`
 
 ### Secondary DNS Server (10.147.17.25)
 
 **Authoritative Zones:**
-- `sheila.hl` - Secondary site zone (authoritative)
+- `sheila.hl.internal` - Secondary site zone (authoritative)
 
 **Replicated Zones:**
-- `shared.homelab.internal` - From primary DNS
-- `homelab.internal` - From primary DNS
+- `services.hl.internal` - From primary DNS
+- `hl.internal` - From primary DNS
 
 ## Kubernetes Integration
 
@@ -181,7 +181,7 @@ Each site's external-dns is configured to manage its own domain:
 **Primary Site:**
 ```yaml
 args:
-  - --domain-filter=pickers.hl
+  - --domain-filter=pickers.hl.internal
   - --txt-owner-id=primary
 env:
   - name: TECHNITIUM_DNS_SERVER
@@ -191,7 +191,7 @@ env:
 **Secondary Site:**
 ```yaml
 args:
-  - --domain-filter=sheila.hl
+  - --domain-filter=sheila.hl.internal
   - --txt-owner-id=secondary
 env:
   - name: TECHNITIUM_DNS_SERVER
@@ -201,7 +201,7 @@ env:
 **Shared Services:**
 ```yaml
 args:
-  - --domain-filter=shared.homelab.internal
+  - --domain-filter=services.hl.internal
   - --txt-owner-id=shared
 env:
   - name: TECHNITIUM_DNS_SERVER
@@ -218,7 +218,7 @@ metadata:
   name: argocd-server
   namespace: argocd
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: "argocd.pickers.hl"
+    external-dns.alpha.kubernetes.io/hostname: "argocd.pickers.hl.internal"
 spec:
   type: LoadBalancer
   loadBalancerIP: 10.147.17.10
@@ -232,7 +232,7 @@ metadata:
   name: argocd-server
   namespace: argocd
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: "argocd.sheila.hl"
+    external-dns.alpha.kubernetes.io/hostname: "argocd.sheila.hl.internal"
 spec:
   type: LoadBalancer
   loadBalancerIP: 10.147.17.20
@@ -246,7 +246,7 @@ metadata:
   name: vault
   namespace: vault
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: "vault.shared.homelab.internal"
+    external-dns.alpha.kubernetes.io/hostname: "vault.services.hl.internal"
 spec:
   type: LoadBalancer
   loadBalancerIP: 10.147.17.100
@@ -265,10 +265,10 @@ Generate proper DNS names for services:
 # Scope: primary, secondary, shared, or empty for shortcut
 
 # Examples:
-get_service_dns "argocd" "primary"    # → argocd.pickers.hl
-get_service_dns "argocd" "secondary"  # → argocd.sheila.hl
-get_service_dns "vault" "shared"      # → vault.shared.homelab.internal
-get_service_dns "grafana" ""          # → grafana.homelab.internal
+get_service_dns "argocd" "primary"    # → argocd.pickers.hl.internal
+get_service_dns "argocd" "secondary"  # → argocd.sheila.hl.internal
+get_service_dns "vault" "shared"      # → vault.services.hl.internal
+get_service_dns "grafana" ""          # → grafana.hl.internal
 ```
 
 ## Migration Guide
@@ -368,7 +368,7 @@ Use public subdomains with split-horizon DNS (internal IPs inside network, exter
 ping 10.147.17.5
 
 # Test DNS query directly
-dig argocd.pickers.hl @10.147.17.5
+dig argocd.pickers.hl.internal @10.147.17.5
 
 # Check Technitium web UI
 open http://10.147.17.5:5380

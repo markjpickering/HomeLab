@@ -38,7 +38,7 @@ The HomeLab uses **site-specific domains** for maximum flexibility:
 
 - **Primary site domain**: `pickers.hl` (configurable via `HOMELAB_PRIMARY_DNS_DOMAIN`)
 - **Secondary site domain**: `sheila.hl` (configurable via `HOMELAB_SECONDARY_DNS_DOMAIN`)
-- **Shared services domain**: `shared.homelab.internal` (configurable via `HOMELAB_SHARED_DNS_DOMAIN`)
+- **Shared services domain**: `services.hl.internal` (configurable via `HOMELAB_SHARED_DNS_DOMAIN`)
 - **Base domain**: `homelab.internal` (configurable via `HOMELAB_DNS_DOMAIN`)
 
 Each site has its own independent DNS zone, allowing:
@@ -51,7 +51,7 @@ Each site has its own independent DNS zone, allowing:
 ```bash
 export HOMELAB_PRIMARY_DNS_DOMAIN="pickers.hl"
 export HOMELAB_SECONDARY_DNS_DOMAIN="sheila.hl"
-export HOMELAB_SHARED_DNS_DOMAIN="shared.homelab.internal"
+export HOMELAB_SHARED_DNS_DOMAIN="services.hl.internal"
 export HOMELAB_DNS_DOMAIN="homelab.internal"  # Base/fallback
 ```
 
@@ -67,18 +67,18 @@ Examples:
 - `grafana.sheila.hl` → 10.147.17.21:3000
 
 #### Shared Services
-Format: `<service>.shared.homelab.internal`
+Format: `<service>.services.hl.internal`
 
 Examples:
-- `vault.shared.homelab.internal` → 10.147.17.100 (VIP)
-- `registry.shared.homelab.internal` → 10.147.17.101 (VIP)
-- `minio.shared.homelab.internal` → 10.147.17.102 (distributed endpoint)
+- `vault.services.hl.internal` → 10.147.17.100 (VIP)
+- `registry.services.hl.internal` → 10.147.17.101 (VIP)
+- `minio.services.hl.internal` → 10.147.17.102 (distributed endpoint)
 
 #### Proxy Shortcuts (Memorable URLs)
 Format: `<service>.homelab.internal` (uses base domain)
 
 Examples:
-- `vault.homelab.internal` → Proxy → `vault.shared.homelab.internal`
+- `vault.homelab.internal` → Proxy → `vault.services.hl.internal`
 - `argocd.homelab.internal` → Proxy → Active site's ArgoCD
 - `grafana.homelab.internal` → Proxy → Unified view (Thanos/multi-cluster)
 
@@ -99,15 +99,15 @@ sheila.hl                           SOA, NS records
 ├── traefik.sheila.hl               A record → 10.147.17.21
 └── *.sheila.hl                     Wildcard for k8s ingress
 
-# Shared services zone (shared.homelab.internal)
-shared.homelab.internal             SOA, NS records
-├── vault.shared.homelab.internal   A record → 10.147.17.100
-├── registry.shared.homelab.internal A record → 10.147.17.101
-└── minio.shared.homelab.internal   A record → 10.147.17.102
+# Shared services zone (services.hl.internal)
+services.hl.internal             SOA, NS records
+├── vault.services.hl.internal   A record → 10.147.17.100
+├── registry.services.hl.internal A record → 10.147.17.101
+└── minio.services.hl.internal   A record → 10.147.17.102
 
 # Base zone for shortcuts (homelab.internal)
 homelab.internal                    SOA, NS records
-├── vault.homelab.internal          CNAME → vault.shared.homelab.internal
+├── vault.homelab.internal          CNAME → vault.services.hl.internal
 ├── argocd.homelab.internal         CNAME → argocd.pickers.hl (or load balanced)
 └── grafana.homelab.internal        CNAME → grafana.pickers.hl
 ```
@@ -127,14 +127,14 @@ homelab.internal                    SOA, NS records
 ```yaml
 # Primary DNS (Site A)
 IP: 10.147.17.5
-Role: Primary authoritative for pickers.hl, shared.homelab.internal, homelab.internal
-Zones: pickers.hl (primary site), shared.homelab.internal, homelab.internal
+Role: Primary authoritative for pickers.hl, services.hl.internal, homelab.internal
+Zones: pickers.hl (primary site), services.hl.internal, homelab.internal
 Zone Transfer: Allow 10.147.17.25 (Site B secondary)
 
 # Secondary DNS (Site B)
 IP: 10.147.17.25
 Role: Primary authoritative for sheila.hl; Secondary for shared zones
-Zones: sheila.hl (secondary site), shared.homelab.internal (replicated), homelab.internal (replicated)
+Zones: sheila.hl (secondary site), services.hl.internal (replicated), homelab.internal (replicated)
 Zone Transfer: From 10.147.17.5 (for shared zones)
 ```
 
@@ -191,7 +191,7 @@ Secondary site uses same config but with:
 - Points to secondary DNS: `10.147.17.25:5380`
 
 Shared services use:
-- `--domain-filter=shared.homelab.internal`
+- `--domain-filter=services.hl.internal`
 - `--txt-owner-id=shared`
 - Points to primary DNS: `10.147.17.5:5380`
 
@@ -224,7 +224,7 @@ DNS returns: 10.147.17.200 (proxy VIP)
   ↓
 Proxy (Traefik) inspects hostname
   ↓
-Routes to: vault.shared.homelab.internal (10.147.17.100)
+Routes to: vault.services.hl.internal (10.147.17.100)
 ```
 
 **Traefik Configuration:**
@@ -310,7 +310,7 @@ metadata:
   name: vault
   namespace: shared-services
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: "vault.shared.homelab.internal"
+    external-dns.alpha.kubernetes.io/hostname: "vault.services.hl.internal"
 spec:
   type: LoadBalancer
   loadBalancerIP: 10.147.17.100  # VIP managed by keepalived
@@ -322,9 +322,9 @@ spec:
 
 Add CNAME records in Technitium:
 ```
-vault.homelab.internal      CNAME   vault.shared.homelab.internal
-argocd.homelab.internal     CNAME   proxy.shared.homelab.internal
-grafana.homelab.internal    CNAME   grafana.shared.homelab.internal
+vault.homelab.internal      CNAME   vault.services.hl.internal
+argocd.homelab.internal     CNAME   proxy.services.hl.internal
+grafana.homelab.internal    CNAME   grafana.services.hl.internal
 ```
 
 Or proxy handles routing without DNS change.
@@ -379,7 +379,7 @@ This creates:
 1. Create a new application in Authentik:
    - Name: Technitium DNS
    - Provider: Proxy Provider (Forward Auth)
-   - External URL: `http://dns.homelab.internal` or `http://dns-primary.shared.homelab.internal`
+   - External URL: `http://dns.homelab.internal` or `http://dns-primary.services.hl.internal`
    - Forward auth mode: Traefik
 
 2. Assign users/groups who should have DNS admin access
@@ -387,7 +387,7 @@ This creates:
 3. The Traefik middleware will automatically redirect unauthenticated users to Authentik login
 
 **Access Flow:**
-1. Navigate to `http://dns.homelab.internal` or `http://dns-primary.shared.homelab.internal`
+1. Navigate to `http://dns.homelab.internal` or `http://dns-primary.services.hl.internal`
 2. If not logged in, redirected to Authentik SSO login
 3. Login with Google/Microsoft or Authentik credentials
 4. Redirected back to Technitium web UI
@@ -512,7 +512,7 @@ metadata:
   name: technitium-primary
   namespace: dns-system
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: "dns-primary.shared.homelab.internal"
+    external-dns.alpha.kubernetes.io/hostname: "dns-primary.services.hl.internal"
 spec:
   type: LoadBalancer
   loadBalancerIP: 10.147.17.5
@@ -545,7 +545,7 @@ spec:
 4. Create subdomains:
    - `site-a.homelab.internal`
    - `site-b.homelab.internal`
-   - `shared.homelab.internal`
+   - `services.hl.internal`
 
 **Via API:**
 ```bash
@@ -873,7 +873,7 @@ search homelab.internal
 dig argocd.site-a.homelab.internal @10.147.17.5
 
 # Test shared service
-dig vault.shared.homelab.internal @10.147.17.5
+dig vault.services.hl.internal @10.147.17.5
 
 # Test shortcut
 dig argocd.homelab.internal @10.147.17.5
@@ -912,8 +912,8 @@ dig test.site-a.homelab.internal @10.147.17.5
 ### Test Failover
 ```bash
 # Query both DNS servers
-dig vault.shared.homelab.internal @10.147.17.5
-dig vault.shared.homelab.internal @10.147.17.25
+dig vault.services.hl.internal @10.147.17.5
+dig vault.services.hl.internal @10.147.17.25
 
 # Should return same result (zone replication working)
 
@@ -921,7 +921,7 @@ dig vault.shared.homelab.internal @10.147.17.25
 docker stop technitium-primary
 
 # Queries should still work (secondary responds)
-dig vault.shared.homelab.internal
+dig vault.services.hl.internal
 ```
 
 ## Maintenance
@@ -933,7 +933,7 @@ dig vault.shared.homelab.internal
 ```bash
 curl -X POST "http://10.147.17.5:5380/api/zones/records/add" \
   -H "Authorization: Bearer ${TECHNITIUM_API_TOKEN}" \
-  -d "domain=myservice.shared.homelab.internal" \
+  -d "domain=myservice.services.hl.internal" \
   -d "type=A" \
   -d "ipAddress=10.147.17.50" \
   -d "ttl=300"
@@ -972,7 +972,7 @@ docker restart technitium-primary
 
 This DNS setup integrates with the multi-site architecture:
 
-1. **Shared services** use `.shared.homelab.internal` with VIPs
+1. **Shared services** use `.services.hl.internal` with VIPs
 2. **Site-specific services** use `.site-{a,b}.homelab.internal`
 3. **Proxy shortcuts** provide memorable URLs
 4. **Zone replication** ensures DNS survives site failure
